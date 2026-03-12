@@ -4,7 +4,6 @@ import { Inter } from "next/font/google"
 import { siteConfig } from "@/config/site"
 import "./globals.css"
 import Navbar from "@/components/home/Navbar"
-import Footer from "@/components/layout/Footer"
 const inter = Inter({
   variable: "--font-inter",
   subsets: ["latin"],

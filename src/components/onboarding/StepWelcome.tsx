@@ -5,7 +5,7 @@ export default function StepWelcome({ onNext }: { onNext: () => void }) {
     <div className="flex flex-col items-center text-center max-w-sm w-full">
       {/* Progress dots */}
       <div className="flex gap-2 mb-10">
-        {[0, 1, 2, 3].map((i) => (
+        {[0, 1, 2, 3, 4].map((i) => (
           <div
             key={i}
             className={`h-1 w-10 rounded-full ${i === 0 ? 'bg-yellow-400' : 'bg-gray-700'}`}
@@ -30,7 +30,7 @@ export default function StepWelcome({ onNext }: { onNext: () => void }) {
         onClick={onNext}
         className="w-full bg-yellow-400 hover:bg-yellow-300 text-black font-semibold py-4 rounded-xl flex items-center justify-center gap-2 transition"
       >
-        Let's Go <ArrowRight size={18} />
+        Let&apos;s Go <ArrowRight size={18} />
       </button>
     </div>
   )

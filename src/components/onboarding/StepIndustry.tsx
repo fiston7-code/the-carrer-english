@@ -20,7 +20,7 @@ export default function StepIndustry({ value, onChange, onNext }: Props) {
     <div className="flex flex-col max-w-sm w-full">
       {/* Progress dots */}
       <div className="flex gap-2 mb-10">
-        {[0, 1, 2, 3].map((i) => (
+        {[0, 1, 2, 3, 4].map((i) => (
           <div
             key={i}
             className={`h-1 w-10 rounded-full ${i <= 2 ? 'bg-yellow-400' : 'bg-gray-700'}`}
@@ -36,7 +36,7 @@ export default function StepIndustry({ value, onChange, onNext }: Props) {
       </p>
 
       {/* Grid options */}
-      <div className="grid grid-cols-2 gap-3 mb-8">
+      <div className="grid grid-cols-2 gap-3 mb-8 text-xs sm:text-sm">
         {industries.map((industry) => (
           <button
             key={industry}

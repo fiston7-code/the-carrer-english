@@ -32,7 +32,7 @@ export default function StepLevel({ value, onChange, onNext }: Props) {
     <div className="flex flex-col max-w-sm w-full">
       {/* Progress dots */}
       <div className="flex gap-2 mb-10">
-        {[0, 1, 2, 3].map((i) => (
+        {[0, 1, 2, 3, 4].map((i) => (
           <div
             key={i}
             className={`h-1 w-10 rounded-full ${i <= 1 ? 'bg-yellow-400' : 'bg-gray-700'}`}

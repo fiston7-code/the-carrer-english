@@ -26,7 +26,7 @@ export default function StepGoals({ value, onChange, onFinish, loading }: Props)
     <div className="flex flex-col max-w-sm w-full">
       {/* Progress dots — tous actifs */}
       <div className="flex gap-2 mb-10">
-        {[0, 1, 2, 3].map((i) => (
+        {[0, 1, 2, 3, 4].map((i) => (
           <div key={i} className="h-1 w-10 rounded-full bg-yellow-400" />
         ))}
       </div>

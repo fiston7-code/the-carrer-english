@@ -63,7 +63,7 @@ export default function SignupPage() {
           <div className="space-y-2">
             <h2 className="text-foreground font-bold text-2xl">Check your inbox ✉️</h2>
             <p className="text-muted-foreground text-sm">
-              We've sent a confirmation link to your email. Click it to activate your **Executive** account.
+              We&apos;ve sent a confirmation link to your email. Click it to activate your **Executive** account.
             </p>
           </div>
           <Link href="/login" className="text-gold text-sm hover:underline">
@@ -173,7 +173,7 @@ export default function SignupPage() {
         {/* Footer */}
         <p className="text-muted-foreground text-sm">
           Already have an account?{" "}
-          <Link href="/login" className="text-gold font-semibold hover:underline">
+          <Link href="/auth/login" className="text-gold font-semibold hover:underline">
             Sign In
           </Link>
         </p>
