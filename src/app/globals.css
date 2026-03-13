@@ -7,7 +7,7 @@
 /* ---------------- THEME TOKENS ---------------- */
 @theme inline {
   /* ── Couleurs systeme (prefixe --color- obligatoire en Tailwind v4) ── */
-  --color-background:         hsl(222 47% 2%);
+  --color-background:         hsl(221 54% 6%);  /* Ton #070d18 */
   --color-foreground:         hsl(210 40% 96%);
   --color-card:               hsl(222 47% 5%);
   --color-card-foreground:    hsl(210 40% 96%);
@@ -31,7 +31,7 @@
   --color-gold:               hsl(43 96% 56%);
   --color-gold-dim:           hsl(43 80% 40%);
   --color-steel:              hsl(215 16% 57%);
-  --color-surface:            hsl(222 47% 7%);
+ --color-surface:            hsl(222 45% 7%);  /* Ton #0a0f1a (Cartes) */
   --color-surface-elevated:   hsl(222 40% 10%);
 
   /* ── Sidebar ── */

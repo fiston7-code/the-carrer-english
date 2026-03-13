@@ -35,14 +35,13 @@ export default function StepRole({
       transition={{ duration: 0.35, ease: 'easeInOut' }}
       className="w-full max-w-md flex flex-col gap-8"
     >
+      {/* Progress dots */}
+      <div className="flex gap-2">
+        {[0, 1, 2, 3, 4].map((i) => (
+          <div key={i} className={`h-1 w-8 rounded-full ${i <= 3 ? 'bg-gold' : 'bg-muted'}`} />
+        ))}
+      </div>
 
-         {/* Progress dots */}
-    <div className="flex gap-2">
-      {[0, 1, 2, 3, 4].map((i) => (
-        <div key={i} className={`h-1 w-8 rounded-full ${i <= 3 ? 'bg-yellow-400' : 'bg-gray-700'}`} />
-      ))}
-    </div>
-    
       {/* Title */}
       <div className="flex flex-col gap-2">
         <h2 className="text-2xl font-bold text-foreground tracking-tight">
@@ -134,7 +133,6 @@ export default function StepRole({
 //   onNext,
 // }: Props) {
 //   const [touched, setTouched] = useState(false)
-
 //   const isValid = roleValue.trim().length > 0
 
 //   const handleNext = () => {
@@ -151,29 +149,38 @@ export default function StepRole({
 //       transition={{ duration: 0.35, ease: 'easeInOut' }}
 //       className="w-full max-w-md flex flex-col gap-8"
 //     >
-//       {/* Titre */}
+
+//          {/* Progress dots */}
+//     <div className="flex gap-2">
+//       {[0, 1, 2, 3, 4].map((i) => (
+//         <div key={i} className={`h-1 w-8 rounded-full ${i <= 3 ? 'bg-yellow-400' : 'bg-gray-700'}`} />
+//       ))}
+//     </div>
+    
+//       {/* Title */}
 //       <div className="flex flex-col gap-2">
 //         <h2 className="text-2xl font-bold text-foreground tracking-tight">
-//           Votre poste
+//           Your position
 //         </h2>
 //         <p className="text-sm text-muted-foreground">
-//           Ces informations nous permettent de personnaliser votre expérience.
+//           This helps us personalize your sessions and match you with the right rooms.
 //         </p>
 //       </div>
 
-//       {/* Champs */}
+//       {/* Fields */}
 //       <div className="flex flex-col gap-5">
-//         {/* Rôle professionnel */}
+
+//         {/* Professional Role */}
 //         <div className="flex flex-col gap-1.5">
 //           <label className="text-sm font-medium text-foreground">
-//             Rôle professionnel <span className="text-red-500">*</span>
+//             Professional role <span className="text-red-500">*</span>
 //           </label>
 //           <input
 //             type="text"
 //             value={roleValue}
 //             onChange={(e) => onRoleChange(e.target.value)}
 //             onBlur={() => setTouched(true)}
-//             placeholder="ex: Ingénieur, Manager, Développeur..."
+//             placeholder="e.g. Engineer, Sales Manager, Developer..."
 //             className={`w-full bg-transparent border rounded-xl px-4 py-3 text-sm text-foreground placeholder:text-muted-foreground outline-none transition-colors duration-200 focus:border-gold ${
 //               touched && !isValid
 //                 ? 'border-red-500'
@@ -186,35 +193,35 @@ export default function StepRole({
 //               animate={{ opacity: 1, y: 0 }}
 //               className="text-xs text-red-500"
 //             >
-//               Le rôle professionnel est requis.
+//               Professional role is required.
 //             </motion.p>
 //           )}
 //         </div>
 
-//         {/* Entreprise */}
+//         {/* Company */}
 //         <div className="flex flex-col gap-1.5">
 //           <label className="text-sm font-medium text-foreground">
-//             Entreprise{' '}
-//             <span className="text-muted-foreground font-normal">(optionnel)</span>
+//             Company{' '}
+//             <span className="text-muted-foreground font-normal">(optional)</span>
 //           </label>
 //           <input
 //             type="text"
 //             value={companyValue}
 //             onChange={(e) => onCompanyChange(e.target.value)}
-//             placeholder="ex: Airbus, Freelance, SNCF..."
+//             placeholder="e.g. Airbus, Freelance, SNCF..."
 //             className="w-full bg-transparent border border-border hover:border-muted-foreground rounded-xl px-4 py-3 text-sm text-foreground placeholder:text-muted-foreground outline-none transition-colors duration-200 focus:border-gold"
 //           />
 //         </div>
 //       </div>
 
-//       {/* Bouton */}
+//       {/* Button */}
 //       <motion.button
 //         whileHover={{ scale: 1.02 }}
 //         whileTap={{ scale: 0.97 }}
 //         onClick={handleNext}
 //         className="w-full bg-gold hover:bg-gold-dim text-primary-foreground font-semibold rounded-full py-3 text-sm transition-colors duration-200"
 //       >
-//         Continuer
+//         Continue
 //       </motion.button>
 //     </motion.div>
 //   )

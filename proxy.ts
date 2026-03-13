@@ -1,8 +1,8 @@
 import { createServerClient } from '@supabase/ssr'
 import { NextResponse, type NextRequest } from 'next/server'
 
-export async function proxy(request: NextRequest) {
-  const response = NextResponse.next()
+export async function proxy(request: NextRequest) {  // ← middleware, pas proxy
+  let supabaseResponse = NextResponse.next({ request })
 
   const supabase = createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -13,9 +13,13 @@ export async function proxy(request: NextRequest) {
           return request.cookies.getAll()
         },
         setAll(cookiesToSet) {
-          cookiesToSet.forEach(({ name, value, options }) => {
-            response.cookies.set(name, value, options)
-          })
+          cookiesToSet.forEach(({ name, value }) =>
+            request.cookies.set(name, value)
+          )
+          supabaseResponse = NextResponse.next({ request })
+          cookiesToSet.forEach(({ name, value, options }) =>
+            supabaseResponse.cookies.set(name, value, options)  // ← cookies sur la response
+          )
         },
       },
     }
@@ -24,12 +28,15 @@ export async function proxy(request: NextRequest) {
   const { data: { user } } = await supabase.auth.getUser()
   const path = request.nextUrl.pathname
 
-  // Pas connecté → login
   if (!user && path.startsWith('/dashboard')) {
-    return NextResponse.redirect(new URL('/login', request.url))
+    const redirectUrl = new URL('/auth/login', request.url)
+    const redirect = NextResponse.redirect(redirectUrl)
+    supabaseResponse.cookies.getAll().forEach((cookie) =>
+      redirect.cookies.set(cookie.name, cookie.value)  // ← réattache les cookies
+    )
+    return redirect
   }
 
-  // Connecté → vérifie onboarding
   if (user && path.startsWith('/dashboard')) {
     const { data: profile } = await supabase
       .from('profiles')
@@ -38,11 +45,14 @@ export async function proxy(request: NextRequest) {
       .single()
 
     if (!profile?.onboarding_completed) {
-      return NextResponse.redirect(new URL('/onboarding', request.url))
+      const redirect = NextResponse.redirect(new URL('/onboarding', request.url))
+      supabaseResponse.cookies.getAll().forEach((cookie) =>
+        redirect.cookies.set(cookie.name, cookie.value)
+      )
+      return redirect
     }
   }
 
-  // Onboarding → si déjà fait, redirect dashboard
   if (user && path === '/onboarding') {
     const { data: profile } = await supabase
       .from('profiles')
@@ -51,11 +61,15 @@ export async function proxy(request: NextRequest) {
       .single()
 
     if (profile?.onboarding_completed) {
-      return NextResponse.redirect(new URL('/dashboard', request.url))
+      const redirect = NextResponse.redirect(new URL('/dashboard', request.url))
+      supabaseResponse.cookies.getAll().forEach((cookie) =>
+        redirect.cookies.set(cookie.name, cookie.value)
+      )
+      return redirect
     }
   }
 
-  return response
+  return supabaseResponse
 }
 
 export const config = {

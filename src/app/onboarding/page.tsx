@@ -88,7 +88,7 @@ const handleFinish = async () => {
     return  // ← stop ici si erreur
   }
 
-  router.push('/auth/dashboard')  // ← seulement si succès
+  router.push('/dashboard')  // ← seulement si succès
 }
 
  const steps = [
