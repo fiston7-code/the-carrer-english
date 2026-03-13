@@ -124,12 +124,13 @@ function Avatar({
             className="object-cover w-full h-full"
           />
         ) : (
-          <div
-            className="w-full h-full flex items-center justify-center bg-surface-elevated text-gold font-bold"
-            style={{ fontSize: size === 'md' ? 18 : 13 }}
-          >
-            {getInitials(name)}
-          </div>
+        <div
+  className="w-full h-full flex items-center justify-center bg-surface-elevated text-gold font-bold"
+  style={{ fontSize: size === 'md' ? 18 : 13 }}
+>
+  {/* On transforme le 'undefined' potentiel en 'null' pour satisfaire TS */}
+  {getInitials(name ?? null)}
+</div>
         )}
       </div>
       <span className="text-xs text-foreground truncate text-center max-w-[80px]">
