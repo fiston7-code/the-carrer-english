@@ -534,7 +534,7 @@ export default function RoomView({ room, profile, userId, isCoach }: Props) {
       .select('id, user_id, role, is_muted, hand_raised, profiles(full_name, avatar_url)')
       .eq('room_id', room.id)
       .is('left_at', null)
-    setDbParticipants((data ?? []) as DbParticipant[])
+    setDbParticipants((data ?? []) as unknown as DbParticipant[])
   }, [room.id])
 
   useEffect(() => {
