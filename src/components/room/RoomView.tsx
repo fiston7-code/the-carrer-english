@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState, useCallback } from 'react'
+import { useEffect, useState, useCallback, useMemo } from 'react'
 import { useRouter } from 'next/navigation'
 import {
   LiveKitRoom,
@@ -12,12 +12,12 @@ import {
 import { Track } from 'livekit-client'
 import { createClient } from '@/lib/supabase/client'
 import Image from 'next/image'
-import { LogOut, Mic, MicOff, Hand, MessageSquare, X, Clock } from 'lucide-react'
+import { LogOut, Mic, MicOff, Hand, MessageSquare, X, Clock, ChevronDown } from 'lucide-react'
 
-// ─── Types ────────────────────────────────────────────────────────────────────
+// ─── Types alignés sur le schema Supabase ─────────────────────────────────────
 
 type Profile = {
-  id: string
+  id: string                  // uuid — profiles.id
   full_name: string | null
   avatar_url: string | null
   english_level: string | null
@@ -28,22 +28,22 @@ type Room = {
   title: string
   status: string
   livekit_room_name: string
-  coaches: {
+  coaches: {                  // jointure depuis rooms.coach_id → coaches.id
     id: string
     full_name: string
     avatar_url: string | null
     is_verified: boolean
-    user_id: string
+    user_id: string           // coaches.user_id → profiles.id du coach
   } | null
 }
 
 type DbParticipant = {
   id: string
-  user_id: string
-  role: string
+  user_id: string             // uuid → profiles.id
+  role: string                
   is_muted: boolean
   hand_raised: boolean
-  profiles: {
+  profiles: {                 // jointure room_participants.user_id → profiles.id
     full_name: string | null
     avatar_url: string | null
   } | null
@@ -51,17 +51,18 @@ type DbParticipant = {
 
 type Feedback = {
   id: string
-  type: string
+  type: string                // 'correction' | 'tip'
   mistake: string | null
   correction: string | null
   explanation: string | null
   created_at: string
+  student_id: string          // uuid → profiles.id du student
 }
 
 type Props = {
   room: Room
-  profile: Profile
-  userId: string
+  profile: Profile            // profil de l'utilisateur connecté
+  userId: string              // profiles.id de l'utilisateur connecté
   isCoach: boolean
 }
 
@@ -98,21 +99,27 @@ function Avatar({
   participant,
   size,
   speaking,
+  onPress,
 }: {
   participant: DbParticipant
   size: 'md' | 'sm'
   speaking: boolean
+  onPress?: () => void
 }) {
   const name = participant.profiles?.full_name
   const avatar = participant.profiles?.avatar_url
   const dim = size === 'md' ? 72 : 52
 
   return (
-    <div className="flex flex-col items-center gap-2">
+    <button
+      onClick={onPress}
+      disabled={!onPress}
+      className="flex flex-col items-center gap-2 disabled:cursor-default"
+    >
       <div
         className={`rounded-full overflow-hidden shrink-0 ${
           speaking ? 'ring-2 ring-gold animate-speaking' : ''
-        }`}
+        } ${onPress ? 'hover:opacity-80 transition-opacity' : ''}`}
         style={{ width: dim, height: dim }}
       >
         {avatar ? (
@@ -124,19 +131,21 @@ function Avatar({
             className="object-cover w-full h-full"
           />
         ) : (
-        <div
-  className="w-full h-full flex items-center justify-center bg-surface-elevated text-gold font-bold"
-  style={{ fontSize: size === 'md' ? 18 : 13 }}
->
-  {/* On transforme le 'undefined' potentiel en 'null' pour satisfaire TS */}
-  {getInitials(name ?? null)}
-</div>
+          <div
+            className="w-full h-full flex items-center justify-center bg-surface-elevated text-gold font-bold"
+            style={{ fontSize: size === 'md' ? 18 : 13 }}
+          >
+            {getInitials(name ?? null)}
+          </div>
         )}
       </div>
-      <span className="text-xs text-foreground truncate text-center max-w-[80px]">
+      <span className="text-xs text-foreground truncate text-center max-w-20">
         {name ?? 'Unknown'}
       </span>
-    </div>
+      {onPress && (
+        <span className="text-xs text-gold font-medium -mt-1">✏️ Feedback</span>
+      )}
+    </button>
   )
 }
 
@@ -166,6 +175,158 @@ function FeedbackCard({ feedback }: { feedback: Feedback }) {
   )
 }
 
+// ─── Feedback Form (Coach → Speaker) ─────────────────────────────────────────
+
+function FeedbackForm({
+  roomId,
+  coachId,
+  targetUserId,
+  targetName,
+  onClose,
+}: {
+  roomId: string
+  coachId: string             // coaches.id du coach connecté
+  targetUserId: string        // profiles.id du speaker ciblé
+  targetName: string
+  onClose: () => void
+}) {
+  const supabase = useMemo(() => createClient(), [])
+  const [type, setType] = useState<'correction' | 'tip'>('correction')
+  const [mistake, setMistake] = useState('')
+  const [correction, setCorrection] = useState('')
+  const [explanation, setExplanation] = useState('')
+  const [loading, setLoading] = useState(false)
+
+  const canSubmit =
+    (type === 'correction' && correction.trim().length > 0) ||
+    (type === 'tip' && explanation.trim().length > 0)
+
+  const handleSubmit = async () => {
+    if (!canSubmit) return
+    setLoading(true)
+    try {
+      const { error } = await supabase.from('live_feedbacks').insert({
+        room_id:     roomId,
+        student_id:  targetUserId,   // ✅ live_feedbacks.student_id (uuid)
+        coach_id:    coachId,        // ✅ live_feedbacks.coach_id (uuid)
+        type,
+        mistake:     type === 'correction' ? mistake.trim() || null : null,
+        correction:  type === 'correction' ? correction.trim() : null,
+        explanation: type === 'tip'        ? explanation.trim() : null,
+      })
+      if (error) console.error('Feedback error:', error)
+      else onClose()
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  return (
+    <div
+      className="fixed inset-0 bg-black/60 z-50 flex items-end justify-center"
+      onClick={(e) => { if (e.target === e.currentTarget) onClose() }}
+    >
+      <div className="bg-surface-elevated border border-border rounded-t-2xl w-full max-w-lg p-5 pb-8">
+
+        <div className="w-10 h-1 bg-border rounded-full mx-auto mb-4" />
+
+        <div className="flex items-center justify-between mb-4">
+          <div>
+            <p className="font-bold text-foreground text-base">Live Feedback</p>
+            <p className="text-muted-foreground text-xs mt-0.5">for {targetName}</p>
+          </div>
+          <button
+            onClick={onClose}
+            className="w-8 h-8 rounded-full bg-surface border border-border flex items-center justify-center text-muted-foreground hover:text-foreground transition-colors"
+          >
+            <X size={16} />
+          </button>
+        </div>
+
+        {/* Tabs correction / tip */}
+        <div className="flex gap-2 mb-4 bg-surface rounded-xl p-1">
+          <button
+            onClick={() => setType('correction')}
+            className={`flex-1 py-2 rounded-lg text-sm font-semibold transition-colors ${
+              type === 'correction'
+                ? 'bg-destructive/20 text-destructive border border-destructive/30'
+                : 'text-muted-foreground hover:text-foreground'
+            }`}
+          >
+            ✗ Correction
+          </button>
+          <button
+            onClick={() => setType('tip')}
+            className={`flex-1 py-2 rounded-lg text-sm font-semibold transition-colors ${
+              type === 'tip'
+                ? 'bg-gold/20 text-gold border border-gold/30'
+                : 'text-muted-foreground hover:text-foreground'
+            }`}
+          >
+            💡 Tip / Praise
+          </button>
+        </div>
+
+        {type === 'correction' ? (
+          <div className="flex flex-col gap-2">
+            <div className="relative">
+              <span className="absolute left-3 top-2.5 text-destructive text-sm font-bold">✗</span>
+              <input
+                className="w-full bg-surface border border-border rounded-xl pl-8 pr-3 py-2.5 text-sm text-foreground placeholder:text-muted-foreground focus:border-destructive/50 outline-none transition-colors"
+                placeholder="What they said (optional)"
+                value={mistake}
+                onChange={(e) => setMistake(e.target.value)}
+              />
+            </div>
+            <div className="relative">
+              <span className="absolute left-3 top-2.5 text-green-400 text-sm font-bold">✓</span>
+              <input
+                className="w-full bg-surface border border-border rounded-xl pl-8 pr-3 py-2.5 text-sm text-foreground placeholder:text-muted-foreground focus:border-gold/50 outline-none transition-colors"
+                placeholder="Correct version (required)"
+                value={correction}
+                onChange={(e) => setCorrection(e.target.value)}
+              />
+            </div>
+          </div>
+        ) : (
+          <textarea
+            className="w-full bg-surface border border-border rounded-xl px-3 py-2.5 text-sm text-foreground placeholder:text-muted-foreground focus:border-gold/50 outline-none transition-colors resize-none h-24"
+            placeholder="Write your tip, suggestion, or encouragement..."
+            value={explanation}
+            onChange={(e) => setExplanation(e.target.value)}
+          />
+        )}
+
+        {/* Quick phrases */}
+        <div className="flex flex-wrap gap-2 mt-3 mb-4">
+          {type === 'tip'
+            ? ['Great job! 🔥', 'Keep going! 👏', 'Almost there!', 'Very natural!'].map((phrase) => (
+                <button key={phrase} onClick={() => setExplanation(phrase)}
+                  className="text-xs px-3 py-1 rounded-full border border-border bg-surface text-muted-foreground hover:text-gold hover:border-gold transition-colors">
+                  {phrase}
+                </button>
+              ))
+            : ['Use "the"', 'Past tense here', 'Wrong preposition', 'Pronunciation'].map((phrase) => (
+                <button key={phrase} onClick={() => setMistake(phrase)}
+                  className="text-xs px-3 py-1 rounded-full border border-border bg-surface text-muted-foreground hover:text-destructive hover:border-destructive/50 transition-colors">
+                  {phrase}
+                </button>
+              ))
+          }
+        </div>
+
+        <button
+          onClick={handleSubmit}
+          disabled={!canSubmit || loading}
+          className="w-full bg-gold text-black font-bold py-3 rounded-xl disabled:opacity-40 transition-opacity text-sm"
+        >
+          {loading ? 'Sending…' : '📤 Send Feedback'}
+        </button>
+      </div>
+    </div>
+  )
+}
+
 // ─── Coach Mic Button ─────────────────────────────────────────────────────────
 
 function CoachMicButton() {
@@ -174,75 +335,44 @@ function CoachMicButton() {
 
   const toggleMic = async () => {
     setLoading(true)
-    try {
-      await localParticipant.setMicrophoneEnabled(!isMicrophoneEnabled)
-    } finally {
-      setLoading(false)
-    }
+    try { await localParticipant.setMicrophoneEnabled(!isMicrophoneEnabled) }
+    finally { setLoading(false) }
   }
 
   return (
-    <button
-      onClick={toggleMic}
-      disabled={loading}
+    <button onClick={toggleMic} disabled={loading}
       className={`w-12 h-12 rounded-full border flex items-center justify-center transition-colors disabled:opacity-50 ${
-        isMicrophoneEnabled
-          ? 'bg-gold border-gold'
-          : 'bg-surface border-border hover:border-gold'
-      }`}
-    >
+        isMicrophoneEnabled ? 'bg-gold border-gold' : 'bg-surface border-border hover:border-gold'
+      }`}>
       {isMicrophoneEnabled
         ? <Mic size={20} className="text-black" />
-        : <MicOff size={20} className="text-muted-foreground" />
-      }
+        : <MicOff size={20} className="text-muted-foreground" />}
     </button>
   )
 }
 
 // ─── Listener Mic Button ──────────────────────────────────────────────────────
 
-function ListenerMicButton({
-  handRaised,
-  onRaiseHand,
-}: {
-  handRaised: boolean
-  onRaiseHand: () => void
-}) {
+function ListenerMicButton({ handRaised, onRaiseHand }: { handRaised: boolean; onRaiseHand: () => void }) {
   const { localParticipant, isMicrophoneEnabled } = useLocalParticipant()
   const [loading, setLoading] = useState(false)
-
-  // Un listener promu speaker peut toggle son micro
   const canSpeak = localParticipant.permissions?.canPublish === true
 
   const handleClick = async () => {
-    if (!canSpeak) {
-      // Pas encore speaker → lever la main
-      onRaiseHand()
-      return
-    }
-    // Speaker → toggle micro
+    if (!canSpeak) { onRaiseHand(); return }
     setLoading(true)
-    try {
-      await localParticipant.setMicrophoneEnabled(!isMicrophoneEnabled)
-    } finally {
-      setLoading(false)
-    }
+    try { await localParticipant.setMicrophoneEnabled(!isMicrophoneEnabled) }
+    finally { setLoading(false) }
   }
 
   return (
-    <button
-      onClick={handleClick}
-      disabled={loading}
+    <button onClick={handleClick} disabled={loading}
       className={`w-12 h-12 rounded-full border flex items-center justify-center transition-colors disabled:opacity-50 ${
-        isMicrophoneEnabled
-          ? 'bg-gold border-gold'
-          : 'bg-surface border-border hover:border-gold'
-      }`}
-    >
+        isMicrophoneEnabled ? 'bg-gold border-gold' : 'bg-surface border-border hover:border-gold'
+      }`}>
       {isMicrophoneEnabled
         ? <Mic size={20} className="text-black" />
-        : <MicOff size={20} className="text-muted-foreground" />
-      }
+        : <MicOff size={20} className="text-muted-foreground" />}
     </button>
   )
 }
@@ -250,187 +380,190 @@ function ListenerMicButton({
 // ─── Room Inner ───────────────────────────────────────────────────────────────
 
 function RoomInner({
-  room,
-  profile,
-  userId,
-  isCoach,
-  dbParticipants,
-  feedbacks,
-  handRaised,
-  onRaiseHand,
-  onLeave,
+  room, profile, userId, isCoach,
+  dbParticipants, feedbacks, handRaised, onRaiseHand, onLeave,
 }: {
-  room: Room
-  profile: Profile
-  userId: string
-  isCoach: boolean
-  dbParticipants: DbParticipant[]
-  feedbacks: Feedback[]
-  handRaised: boolean
-  onRaiseHand: () => void
-  onLeave: () => void
+  room: Room; profile: Profile; userId: string; isCoach: boolean
+  dbParticipants: DbParticipant[]; feedbacks: Feedback[]
+  handRaised: boolean; onRaiseHand: () => void; onLeave: () => void
 }) {
-  const supabase = createClient()
+  const supabase = useMemo(() => createClient(), [])
   const livekitParticipants = useParticipants()
   const [showFeedback, setShowFeedback] = useState(false)
-  const [raisedHands, setRaisedHands] = useState<string[]>([])
+  const [feedbackTarget, setFeedbackTarget] = useState<{ userId: string; name: string } | null>(null)
 
-  // ── Raised hands realtime (coach uniquement) ────────────────────────────
-  useEffect(() => {
-    if (!isCoach) return
+  // ✅ Source unique — dérivé directement depuis dbParticipants
+  const raisedHands = dbParticipants.filter((p) => p.hand_raised && p.role === 'listener')
 
-    setRaisedHands(
-      dbParticipants
-        .filter((p) => p.hand_raised && p.role === 'listener')
-        .map((p) => p.user_id)
-    )
+  // coaches.id du coach connecté (pour live_feedbacks.coach_id)
+  const coachDbId = room.coaches?.id ?? ''
 
-    const channel = supabase
-      .channel(`hands-${room.id}`)
-      .on('postgres_changes', {
-        event: 'UPDATE',
-        schema: 'public',
-        table: 'room_participants',
-        filter: `room_id=eq.${room.id}`,
-      }, (payload) => {
-        const p = payload.new as any
-        if (p.hand_raised) {
-          setRaisedHands((prev) => [...new Set([...prev, p.user_id])])
-        } else {
-          setRaisedHands((prev) => prev.filter((id) => id !== p.user_id))
-        }
-      })
-      .subscribe()
-
-    return () => { supabase.removeChannel(channel) }
-  }, [room.id, isCoach, dbParticipants])
-
-  // ── Promote listener → speaker ──────────────────────────────────────────
   const promoteToSpeaker = async (participantUserId: string) => {
     await fetch('/api/livekit/promote', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        roomName: room.livekit_room_name,
-        participantIdentity: participantUserId,
-        canPublish: true,
-      }),
+      body: JSON.stringify({ roomName: room.livekit_room_name, participantIdentity: participantUserId, canPublish: true }),
     })
-
-    await supabase
-      .from('room_participants')
+    await supabase.from('room_participants')
       .update({ role: 'speaker', hand_raised: false })
       .eq('room_id', room.id)
       .eq('user_id', participantUserId)
-
-    setRaisedHands((prev) => prev.filter((id) => id !== participantUserId))
   }
 
-  const speakingIds = new Set(
-    livekitParticipants.filter((p) => p.isSpeaking).map((p) => p.identity)
-  )
+  const revokeFromSpeaker = async (participantUserId: string) => {
+    await fetch('/api/livekit/promote', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ roomName: room.livekit_room_name, participantIdentity: participantUserId, canPublish: false }),
+    })
+    await supabase.from('room_participants')
+      .update({ role: 'listener' })
+      .eq('room_id', room.id)
+      .eq('user_id', participantUserId)
+  }
 
-  const speakers = dbParticipants.filter((p) => p.role === 'speaker' || p.role === 'coach')
-  const listeners = dbParticipants.filter((p) => p.role === 'listener')
+  const speakingIds = new Set(livekitParticipants.filter((p) => p.isSpeaking).map((p) => p.identity))
+const coaches = dbParticipants.filter(
+  (p) => p.user_id === room.coaches?.user_id
+)
+
+const speakers = dbParticipants.filter(
+  (p) =>
+    p.role === 'speaker' &&
+    p.user_id !== room.coaches?.user_id
+)
+
+const listeners = dbParticipants.filter(
+  (p) =>
+    p.role === 'listener' &&
+    p.user_id !== room.coaches?.user_id
+)
+
+
 
   return (
     <div className="min-h-screen bg-background text-foreground flex flex-col pb-28">
-
       <RemoteAudio />
 
-      {/* ── Header ── */}
+      {/* FeedbackForm — coach tape sur un speaker */}
+      {feedbackTarget && (
+        <FeedbackForm
+          roomId={room.id}
+          coachId={coachDbId}
+          targetUserId={feedbackTarget.userId}
+          targetName={feedbackTarget.name}
+          onClose={() => setFeedbackTarget(null)}
+        />
+      )}
+
+      {/* Header */}
       <div className="px-4 pt-6 pb-4 flex items-start justify-between">
         <div>
-          <h1 className="font-bold text-foreground text-base leading-tight">
-            {room.title}
-          </h1>
+          <h1 className="font-bold text-foreground text-base leading-tight">{room.title}</h1>
           <p className="text-gold text-xs mt-0.5">
             Coach {room.coaches?.full_name} · {dbParticipants.length} participants
           </p>
         </div>
-        <button
-          onClick={onLeave}
-          className="flex items-center gap-1.5 border border-border bg-surface
-                     px-4 py-2 rounded-full text-sm text-foreground
-                     hover:border-destructive hover:text-destructive transition-colors"
-        >
-          <LogOut size={14} />
-          Leave
+        <button onClick={onLeave}
+          className="flex items-center gap-1.5 border border-border bg-surface px-4 py-2 rounded-full text-sm text-foreground hover:border-destructive hover:text-destructive transition-colors">
+          <LogOut size={14} /> Leave
         </button>
       </div>
 
-      {/* ── Raised Hands (coach only) ── */}
+      {/* Mains levées — coach uniquement */}
       {isCoach && raisedHands.length > 0 && (
-        <div className="px-4 mt-2 mb-2">
-          <p className="text-gold text-xs font-semibold tracking-widest uppercase mb-3">
-            ✋ Raised Hands
-          </p>
-          <div className="flex flex-col gap-2">
-            {raisedHands.map((uid) => {
-              const p = dbParticipants.find((x) => x.user_id === uid)
-              const name = p?.profiles?.full_name ?? uid
-              return (
-                <div
-                  key={uid}
-                  className="flex items-center justify-between bg-surface border border-border px-4 py-2 rounded-xl"
-                >
-                  <span className="text-sm text-foreground">{name}</span>
-                  <button
-                    onClick={() => promoteToSpeaker(uid)}
-                    className="text-xs bg-gold text-black font-bold px-3 py-1 rounded-full hover:bg-gold-dim transition"
-                  >
-                    Let speak
-                  </button>
+        <div className="mx-4 mt-2 mb-2 bg-gold/10 border border-gold/30 rounded-2xl overflow-hidden">
+          <div className="flex items-center gap-2 px-4 py-2.5 border-b border-gold/20">
+            <span className="text-base">✋</span>
+            <p className="text-gold text-xs font-bold tracking-widest uppercase">
+              {raisedHands.length} Raised Hand{raisedHands.length > 1 ? 's' : ''}
+            </p>
+          </div>
+          <div className="flex flex-col divide-y divide-gold/10">
+            {raisedHands.map((p) => (
+              <div key={p.user_id} className="flex items-center justify-between px-4 py-3">
+                <div className="flex items-center gap-3">
+                  <div className="w-8 h-8 rounded-full bg-surface-elevated flex items-center justify-center text-xs font-bold text-gold">
+                    {getInitials(p.profiles?.full_name ?? null)}
+                  </div>
+                  <span className="text-sm text-foreground font-medium">
+                    {p.profiles?.full_name ?? 'Unknown'}
+                  </span>
                 </div>
-              )
-            })}
+                <button onClick={() => promoteToSpeaker(p.user_id)}
+                  className="text-xs bg-gold text-black font-bold px-4 py-1.5 rounded-full hover:opacity-80 transition-opacity">
+                  🎤 Let speak
+                </button>
+              </div>
+            ))}
           </div>
         </div>
       )}
 
-      {/* ── Speakers ── */}
+      {/* Coach */}
       <div className="px-4 mt-4">
+        <p className="text-muted-foreground text-xs font-semibold tracking-widest uppercase mb-4">Coach</p>
+        <div className="flex flex-wrap gap-6">
+          {coaches.map((p) => (
+            <Avatar key={p.id} participant={p} size="md" speaking={speakingIds.has(p.user_id)} />
+          ))}
+        </div>
+      </div>
+
+      {/* Speakers — coach tape pour corriger */}
+      <div className="px-4 mt-6">
         <p className="text-muted-foreground text-xs font-semibold tracking-widest uppercase mb-4">
           Speakers
+          {isCoach && speakers.length > 0 && (
+            <span className="ml-2 text-gold normal-case font-normal">· tap to give feedback</span>
+          )}
         </p>
         <div className="flex flex-wrap gap-6">
           {speakers.length === 0 ? (
             <p className="text-muted-foreground text-sm">No speakers yet</p>
           ) : (
             speakers.map((p) => (
-              <Avatar
-                key={p.id}
-                participant={p}
-                size="md"
-                speaking={speakingIds.has(p.user_id)}
-              />
+              <div key={p.id} className="flex flex-col items-center gap-1">
+                <Avatar
+                  participant={p}
+                  size="md"
+                  speaking={speakingIds.has(p.user_id)}
+                  onPress={isCoach
+                    ? () => setFeedbackTarget({ userId: p.user_id, name: p.profiles?.full_name ?? 'Unknown' })
+                    : undefined}
+                />
+                {isCoach && p.user_id !== userId && (
+                  <button onClick={() => revokeFromSpeaker(p.user_id)}
+                    className="text-xs text-muted-foreground hover:text-destructive transition-colors flex items-center gap-0.5">
+                    <ChevronDown size={10} /> Mute
+                  </button>
+                )}
+              </div>
             ))
           )}
         </div>
       </div>
 
-      {/* ── Listeners ── */}
+      {/* Listeners */}
       <div className="px-4 mt-8">
-        <p className="text-muted-foreground text-xs font-semibold tracking-widest uppercase mb-4">
-          Listeners
-        </p>
+        <p className="text-muted-foreground text-xs font-semibold tracking-widest uppercase mb-4">Listeners</p>
         <div className="flex flex-wrap gap-4">
           {listeners.length === 0 ? (
             <p className="text-muted-foreground text-sm">No listeners yet</p>
           ) : (
             listeners.map((p) => (
-              <Avatar
-                key={p.id}
-                participant={p}
-                size="sm"
-                speaking={speakingIds.has(p.user_id)}
-              />
+              <div key={p.id} className="relative">
+                <Avatar participant={p} size="sm" speaking={speakingIds.has(p.user_id)} />
+                {p.hand_raised && (
+                  <span className="absolute -top-1 -right-1 text-base leading-none">✋</span>
+                )}
+              </div>
             ))
           )}
         </div>
       </div>
 
-      {/* ── Feedback Panel ── */}
+      {/* Feedback Panel — student voit ses corrections */}
       {showFeedback && (
         <div className="fixed inset-x-0 bottom-24 mx-4 bg-surface-elevated border border-border rounded-2xl z-50 overflow-hidden">
           <div className="flex items-center justify-between px-4 py-3 border-b border-border">
@@ -448,68 +581,55 @@ function RoomInner({
           </div>
           <div className="border-t border-border px-4 py-3 flex items-center justify-center gap-6">
             {['👏', '🔥', '🧠'].map((emoji) => (
-              <button key={emoji} className="text-2xl hover:scale-125 transition-transform">
-                {emoji}
-              </button>
+              <button key={emoji} className="text-2xl hover:scale-125 transition-transform">{emoji}</button>
             ))}
           </div>
         </div>
       )}
 
-      {/* ── Bottom Bar ── */}
+      {/* Bottom Bar */}
       <div className="fixed bottom-0 inset-x-0 bg-surface-elevated border-t border-border px-8 py-4">
         <div className="flex items-center justify-between max-w-md mx-auto">
-
-          {/* Mic : comportement différent coach vs listener */}
           {isCoach
             ? <CoachMicButton />
-            : <ListenerMicButton handRaised={handRaised} onRaiseHand={onRaiseHand} />
-          }
+            : <ListenerMicButton handRaised={handRaised} onRaiseHand={onRaiseHand} />}
 
-          {/* Raise Hand (visible uniquement pour les listeners) */}
           {!isCoach && (
-            <button
-              onClick={onRaiseHand}
+            <button onClick={onRaiseHand}
               className={`w-12 h-12 rounded-full border flex items-center justify-center transition-colors ${
-                handRaised
-                  ? 'bg-gold border-gold'
-                  : 'bg-surface border-border hover:border-gold'
-              }`}
-            >
+                handRaised ? 'bg-gold border-gold' : 'bg-surface border-border hover:border-gold'
+              }`}>
               <Hand size={20} className={handRaised ? 'text-black' : 'text-muted-foreground'} />
             </button>
           )}
 
-          {/* Feedback */}
-          <button
-            onClick={() => setShowFeedback(!showFeedback)}
-            className="relative w-12 h-12 rounded-full bg-surface border border-border flex items-center justify-center hover:border-gold transition-colors"
-          >
+          <button onClick={() => setShowFeedback(!showFeedback)}
+            className="relative w-12 h-12 rounded-full bg-surface border border-border flex items-center justify-center hover:border-gold transition-colors">
             <MessageSquare size={20} className="text-muted-foreground" />
             {feedbacks.length > 0 && !showFeedback && (
-              <span className="absolute -top-1 -right-1 w-4 h-4 bg-gold rounded-full text-[10px] text-black font-bold flex items-center justify-center">
+              <span className="absolute -top-1 -right-1 w-4 h-4 bg-gold rounded-full text-xs text-black font-bold flex items-center justify-center">
                 {feedbacks.length > 9 ? '9+' : feedbacks.length}
               </span>
             )}
           </button>
-
         </div>
       </div>
     </div>
   )
 }
 
-// ─── Main Export ──────────────────────────────────────────────────────────────
+
 
 export default function RoomView({ room, profile, userId, isCoach }: Props) {
   const router = useRouter()
-  const supabase = createClient()
+  const supabase = useMemo(() => createClient(), [])
 
   const [token, setToken] = useState<string | null>(null)
   const [dbParticipants, setDbParticipants] = useState<DbParticipant[]>([])
   const [feedbacks, setFeedbacks] = useState<Feedback[]>([])
   const [handRaised, setHandRaised] = useState(false)
 
+  // 1. Token LiveKit
   useEffect(() => {
     const fetchToken = async () => {
       const res = await fetch('/api/livekit/token', {
@@ -519,32 +639,72 @@ export default function RoomView({ room, profile, userId, isCoach }: Props) {
           roomName: room.livekit_room_name,
           participantId: userId,
           participantName: profile.full_name ?? userId,
-          role: isCoach ? 'coach' : 'listener',
+         role: room.coaches?.user_id === userId ? 'coach' : 'listener'
         }),
       })
       const data = await res.json()
       setToken(data.token)
     }
     fetchToken()
-  }, [room.livekit_room_name, userId, isCoach, profile.full_name])
+  }, [room.livekit_room_name, userId, isCoach, profile.full_name, room.coaches])
+
+
 
   const fetchParticipants = useCallback(async () => {
-    const { data } = await supabase
-      .from('room_participants')
-      .select('id, user_id, role, is_muted, hand_raised, profiles(full_name, avatar_url)')
-      .eq('room_id', room.id)
-      .is('left_at', null)
-    setDbParticipants((data ?? []) as unknown as DbParticipant[])
-  }, [room.id])
+  const { data, error } = await supabase
+    .from('room_participants')
+    .select(`
+      id, 
+      user_id, 
+      role, 
+      is_muted, 
+      hand_raised, 
+      profiles (
+        full_name, 
+        avatar_url
+      )
+    `)
+    .eq('room_id', room.id)
+    .is('left_at', null);
 
+  if (error) {
+    // Si l'erreur est encore {}, c'est que l'objet est complexe. 
+    // On le transforme en string pour tout voir.
+    console.error("❌ Erreur de fetch détaillée :", JSON.stringify(error, null, 2));
+    return;
+  }
+
+  
+
+  setDbParticipants(data as unknown as DbParticipant[]);
+}, [room.id, supabase]);
+
+
+    useEffect(() => {
+  const handleUnload = () => {
+    // navigator.sendBeacon est fiable même pendant fermeture d'onglet
+    navigator.sendBeacon(
+      '/api/livekit/leave',
+      JSON.stringify({ roomId: room.id, userId })
+    )
+  }
+
+  window.addEventListener('beforeunload', handleUnload)
+  return () => window.removeEventListener('beforeunload', handleUnload)
+}, [room.id, userId])
+
+  // 3. Upsert + realtime — après fetchParticipants
   useEffect(() => {
+
+    
     supabase.from('room_participants').upsert({
-      room_id: room.id,
-      user_id: userId,
-      role: isCoach ? 'coach' : 'listener',
-      is_muted: true,
+      room_id:     room.id,
+      user_id:     userId,
+     role: isCoach ? 'speaker' : 'listener',
+      is_muted:    true,
       hand_raised: false,
-      joined_at: new Date().toISOString(),
+      joined_at:   new Date().toISOString(),
+      left_at:     null,
     }, { onConflict: 'room_id,user_id' }).then(() => fetchParticipants())
 
     const channel = supabase
@@ -558,16 +718,22 @@ export default function RoomView({ room, profile, userId, isCoach }: Props) {
       .subscribe()
 
     return () => { supabase.removeChannel(channel) }
-  }, [room.id, userId, isCoach, fetchParticipants])
+  }, [room.id, userId, isCoach, fetchParticipants, supabase])
 
+  // 4. Feedbacks
   useEffect(() => {
-    supabase
+    let query = supabase
       .from('live_feedbacks')
-      .select('id, type, mistake, correction, explanation, created_at')
+      .select('id, type, mistake, correction, explanation, created_at, student_id')
       .eq('room_id', room.id)
       .order('created_at', { ascending: false })
-      .limit(20)
-      .then(({ data }) => setFeedbacks(data ?? []))
+      .limit(20);
+
+    if (!isCoach) {
+      query = query.eq('student_id', userId);
+    }
+
+    query.then(({ data }) => setFeedbacks(data ?? []));
 
     const channel = supabase
       .channel(`feedbacks-${room.id}`)
@@ -580,7 +746,7 @@ export default function RoomView({ room, profile, userId, isCoach }: Props) {
       .subscribe()
 
     return () => { supabase.removeChannel(channel) }
-  }, [room.id])
+  }, [room.id, userId, isCoach, supabase])
 
   const handleLeave = useCallback(async () => {
     await supabase
@@ -589,7 +755,7 @@ export default function RoomView({ room, profile, userId, isCoach }: Props) {
       .eq('room_id', room.id)
       .eq('user_id', userId)
     router.push('/dashboard')
-  }, [room.id, userId, router])
+  }, [room.id, userId, router, supabase])
 
   const handleRaiseHand = useCallback(async () => {
     const next = !handRaised
@@ -599,7 +765,7 @@ export default function RoomView({ room, profile, userId, isCoach }: Props) {
       .update({ hand_raised: next })
       .eq('room_id', room.id)
       .eq('user_id', userId)
-  }, [handRaised, room.id, userId])
+  }, [handRaised, room.id, userId, supabase])
 
   if (!token) {
     return (
@@ -614,7 +780,7 @@ export default function RoomView({ room, profile, userId, isCoach }: Props) {
       serverUrl={process.env.NEXT_PUBLIC_LIVEKIT_URL!}
       token={token}
       connect={true}
-      audio={false}        // ← on gère le micro manuellement via les boutons
+      audio={false}
       video={false}
       onDisconnected={handleLeave}
     >
@@ -632,3 +798,9 @@ export default function RoomView({ room, profile, userId, isCoach }: Props) {
     </LiveKitRoom>
   )
 }
+
+
+
+
+
+
