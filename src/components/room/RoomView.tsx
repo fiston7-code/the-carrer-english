@@ -381,11 +381,12 @@ function ListenerMicButton({ handRaised, onRaiseHand }: { handRaised: boolean; o
 
 function RoomInner({
   room, profile, userId, isCoach,
-  dbParticipants, feedbacks, handRaised, onRaiseHand, onLeave,
+  dbParticipants, feedbacks, handRaised, onRaiseHand, onLeave, refreshParticipants,
 }: {
   room: Room; profile: Profile; userId: string; isCoach: boolean
   dbParticipants: DbParticipant[]; feedbacks: Feedback[]
   handRaised: boolean; onRaiseHand: () => void; onLeave: () => void
+  refreshParticipants: () => Promise<void>
 }) {
   const supabase = useMemo(() => createClient(), [])
   const livekitParticipants = useParticipants()
@@ -398,17 +399,57 @@ function RoomInner({
   // coaches.id du coach connecté (pour live_feedbacks.coach_id)
   const coachDbId = room.coaches?.id ?? ''
 
+  // const promoteToSpeaker = async (participantUserId: string) => {
+  //   await fetch('/api/livekit/promote', {
+  //     method: 'POST',
+  //     headers: { 'Content-Type': 'application/json' },
+  //     body: JSON.stringify({ roomName: room.livekit_room_name, participantIdentity: participantUserId, canPublish: true }),
+  //   })
+  //   await supabase.from('room_participants')
+  //     .update({ role: 'speaker', hand_raised: false })
+  //     .eq('room_id', room.id)
+  //     .eq('user_id', participantUserId)
+  // }
+
   const promoteToSpeaker = async (participantUserId: string) => {
-    await fetch('/api/livekit/promote', {
+  try {
+    console.log("[PROMOTE CLIENT] Starting for user:", participantUserId);
+
+    const promoteRes = await fetch('/api/livekit/promote', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ roomName: room.livekit_room_name, participantIdentity: participantUserId, canPublish: true }),
-    })
-    await supabase.from('room_participants')
+      body: JSON.stringify({
+        roomName: room.livekit_room_name,
+        participantIdentity: participantUserId,
+        canPublish: true,
+      }),
+    });
+
+    if (!promoteRes.ok) {
+      const errText = await promoteRes.text();
+      throw new Error(`Promote API failed: ${promoteRes.status} - ${errText}`);
+    }
+    console.log("[PROMOTE CLIENT] LiveKit promote success");
+
+    const { error: supabaseError } = await supabase
+      .from('room_participants')
       .update({ role: 'speaker', hand_raised: false })
       .eq('room_id', room.id)
-      .eq('user_id', participantUserId)
+      .eq('user_id', participantUserId);
+
+    if (supabaseError) {
+      console.error("[PROMOTE CLIENT] Supabase role update error:", supabaseError);
+      throw supabaseError;
+    }
+    console.log("[PROMOTE CLIENT] Supabase role updated to speaker");
+
+    // Force refresh immédiat (optionnel mais utile pour debug)
+    await refreshParticipants();
+  } catch (err) {
+    console.error("[PROMOTE CLIENT] Full promote failed:", err);
+    // Toast error ici plus tard
   }
+};
 
   const revokeFromSpeaker = async (participantUserId: string) => {
     await fetch('/api/livekit/promote', {
@@ -627,7 +668,11 @@ export default function RoomView({ room, profile, userId, isCoach }: Props) {
   const [token, setToken] = useState<string | null>(null)
   const [dbParticipants, setDbParticipants] = useState<DbParticipant[]>([])
   const [feedbacks, setFeedbacks] = useState<Feedback[]>([])
-  const [handRaised, setHandRaised] = useState(false)
+
+  const handRaised = useMemo(
+    () => dbParticipants.find((p) => p.user_id === userId)?.hand_raised ?? false,
+    [dbParticipants, userId],
+  )
 
   // 1. Token LiveKit
   useEffect(() => {
@@ -767,29 +812,22 @@ export default function RoomView({ room, profile, userId, isCoach }: Props) {
   //     .eq('user_id', userId)
   // }, [handRaised, room.id, userId, supabase])
 
-  const handleRaiseHand = useCallback(async () => {
-  const next = !handRaised;
-  console.log("→ Tentative raise hand →", next, "user:", userId);
-
-  setHandRaised(next); // mise à jour UI immédiate (optimistic)
+const handleRaiseHand = useCallback(async () => {
+  const next = !handRaised
+  console.log("→ Tentative raise hand →", next, "user:", userId)
 
   const { error } = await supabase
     .from('room_participants')
-    .update({ 
-      hand_raised: next,
-    })
+    .update({ hand_raised: next })
     .eq('room_id', room.id)
-    .eq('user_id', userId);
+    .eq('user_id', userId)
 
   if (error) {
-    console.error("RAISE HAND ERROR:", error);
-    // Optionnel : rollback UI si échec
-    setHandRaised(!next);
-    // Tu peux aussi afficher un toast d'erreur ici plus tard
+    console.error("RAISE HAND ERROR:", error)
   } else {
-    console.log("Hand raised mis à jour OK");
+    console.log("Hand raised mis à jour OK")
   }
-}, [handRaised, room.id, userId, supabase]);
+}, [handRaised, room.id, userId, supabase])
   if (!token) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
@@ -817,6 +855,7 @@ export default function RoomView({ room, profile, userId, isCoach }: Props) {
         handRaised={handRaised}
         onRaiseHand={handleRaiseHand}
         onLeave={handleLeave}
+        refreshParticipants={fetchParticipants}
       />
     </LiveKitRoom>
   )

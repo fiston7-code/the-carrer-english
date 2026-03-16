@@ -21,11 +21,26 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: 'Missing params' }, { status: 400 })
   }
 
+  // await svc.updateParticipant(roomName, participantIdentity, undefined, {
+  //   canPublish,
+  //   canSubscribe: true,
+  //   canPublishData: true,
+  // })
+
+  // return NextResponse.json({ ok: true })
+
+  try {
+  console.log(`[PROMOTE] Updating ${participantIdentity} in ${roomName} → canPublish: ${canPublish}`);
   await svc.updateParticipant(roomName, participantIdentity, undefined, {
     canPublish,
     canSubscribe: true,
     canPublishData: true,
-  })
-
-  return NextResponse.json({ ok: true })
+  });
+  console.log("[PROMOTE] Success");
+  return NextResponse.json({ ok: true });
+} catch (err: unknown) {
+  const message = err instanceof Error ? err.message : String(err);
+  console.error("[PROMOTE] Failed:", message);
+  return NextResponse.json({ error: message }, { status: 500 });
+}
 }
