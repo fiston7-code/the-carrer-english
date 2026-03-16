@@ -757,16 +757,39 @@ export default function RoomView({ room, profile, userId, isCoach }: Props) {
     router.push('/dashboard')
   }, [room.id, userId, router, supabase])
 
-  const handleRaiseHand = useCallback(async () => {
-    const next = !handRaised
-    setHandRaised(next)
-    await supabase
-      .from('room_participants')
-      .update({ hand_raised: next })
-      .eq('room_id', room.id)
-      .eq('user_id', userId)
-  }, [handRaised, room.id, userId, supabase])
+  // const handleRaiseHand = useCallback(async () => {
+  //   const next = !handRaised
+  //   setHandRaised(next)
+  //   await supabase
+  //     .from('room_participants')
+  //     .update({ hand_raised: next })
+  //     .eq('room_id', room.id)
+  //     .eq('user_id', userId)
+  // }, [handRaised, room.id, userId, supabase])
 
+  const handleRaiseHand = useCallback(async () => {
+  const next = !handRaised;
+  console.log("→ Tentative raise hand →", next, "user:", userId);
+
+  setHandRaised(next); // mise à jour UI immédiate (optimistic)
+
+  const { error } = await supabase
+    .from('room_participants')
+    .update({ 
+      hand_raised: next,
+    })
+    .eq('room_id', room.id)
+    .eq('user_id', userId);
+
+  if (error) {
+    console.error("RAISE HAND ERROR:", error);
+    // Optionnel : rollback UI si échec
+    setHandRaised(!next);
+    // Tu peux aussi afficher un toast d'erreur ici plus tard
+  } else {
+    console.log("Hand raised mis à jour OK");
+  }
+}, [handRaised, room.id, userId, supabase]);
   if (!token) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
