@@ -660,7 +660,6 @@ const listeners = dbParticipants.filter(
 }
 
 
-
 export default function RoomView({ room, profile, userId, isCoach }: Props) {
   const router = useRouter()
   const supabase = useMemo(() => createClient(), [])
@@ -671,87 +670,62 @@ export default function RoomView({ room, profile, userId, isCoach }: Props) {
 
   const handRaised = useMemo(
     () => dbParticipants.find((p) => p.user_id === userId)?.hand_raised ?? false,
-    [dbParticipants, userId],
+    [dbParticipants, userId]
   )
 
-  // 1. Token LiveKit
+  // 1. Token
   useEffect(() => {
-    const fetchToken = async () => {
-      const res = await fetch('/api/livekit/token', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          roomName: room.livekit_room_name,
-          participantId: userId,
-          participantName: profile.full_name ?? userId,
-         role: room.coaches?.user_id === userId ? 'coach' : 'listener'
-        }),
-      })
-      const data = await res.json()
-      setToken(data.token)
-    }
-    fetchToken()
-  }, [room.livekit_room_name, userId, isCoach, profile.full_name, room.coaches])
+    fetch('/api/livekit/token', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        roomName: room.livekit_room_name,
+        participantId: userId,
+        participantName: profile.full_name ?? userId,
+        role: room.coaches?.user_id === userId ? 'coach' : 'listener',
+      }),
+    }).then(r => r.json()).then(d => setToken(d.token))
+  }, [room.livekit_room_name, userId, profile.full_name, room.coaches])
 
-
-
+  // 2. fetchParticipants en DEUX TEMPS (jointure ne marche pas sur mobile)
   const fetchParticipants = useCallback(async () => {
-  const { data, error } = await supabase
-    .from('room_participants')
-    .select(`
-      id, 
-      user_id, 
-      role, 
-      is_muted, 
-      hand_raised, 
-      profiles (
-        full_name, 
-        avatar_url
-      )
-    `)
-    .eq('room_id', room.id)
-    .is('left_at', null);
+    const { data: parts, error } = await supabase
+      .from('room_participants')
+      .select('id, user_id, role, is_muted, hand_raised')
+      .eq('room_id', room.id)
+      .is('left_at', null)
 
-  if (error) {
-    // Si l'erreur est encore {}, c'est que l'objet est complexe. 
-    // On le transforme en string pour tout voir.
-    console.error("❌ Erreur de fetch détaillée :", JSON.stringify(error, null, 2));
-    return;
-  }
+    if (error) { console.error('fetchParticipants error:', error); return }
+    if (!parts || parts.length === 0) { setDbParticipants([]); return }
 
-  
+    const userIds = parts.map(p => p.user_id)
+    const { data: profiles } = await supabase
+      .from('profiles')
+      .select('id, full_name, avatar_url')
+      .in('id', userIds)
 
-  setDbParticipants(data as unknown as DbParticipant[]);
-}, [room.id, supabase]);
+    const merged = parts.map(p => ({
+      ...p,
+      profiles: profiles?.find(pr => pr.id === p.user_id) ?? null,
+    }))
 
+    setDbParticipants(merged as unknown as DbParticipant[])
+  }, [room.id, supabase])
 
-    useEffect(() => {
-  const handleUnload = () => {
-    // navigator.sendBeacon est fiable même pendant fermeture d'onglet
-    navigator.sendBeacon(
-      '/api/livekit/leave',
-      JSON.stringify({ roomId: room.id, userId })
-    )
-  }
-
-  window.addEventListener('beforeunload', handleUnload)
-  return () => window.removeEventListener('beforeunload', handleUnload)
-}, [room.id, userId])
-
-  // 3. Upsert + realtime — après fetchParticipants
+  // 3. Upsert + realtime + POLLING mobile (toutes les 5s)
   useEffect(() => {
-
-    
+    // ✅ Rôle correct
     supabase.from('room_participants').upsert({
       room_id:     room.id,
       user_id:     userId,
-     role: isCoach ? 'speaker' : 'listener',
+      role:        isCoach ? 'speaker' : 'listener',  // ← BUG CORRIGÉ
       is_muted:    true,
       hand_raised: false,
       joined_at:   new Date().toISOString(),
       left_at:     null,
     }, { onConflict: 'room_id,user_id' }).then(() => fetchParticipants())
 
+    // Realtime WebSocket
     const channel = supabase
       .channel(`participants-${room.id}`)
       .on('postgres_changes', {
@@ -762,7 +736,20 @@ export default function RoomView({ room, profile, userId, isCoach }: Props) {
       }, () => fetchParticipants())
       .subscribe()
 
-    return () => { supabase.removeChannel(channel) }
+    // ✅ Polling fallback pour mobile (WebSocket mort en background)
+    const poll = setInterval(fetchParticipants, 5000)
+
+    // ✅ Reconnexion quand l'app revient au premier plan
+    const handleVisibility = () => {
+      if (document.visibilityState === 'visible') fetchParticipants()
+    }
+    document.addEventListener('visibilitychange', handleVisibility)
+
+    return () => {
+      supabase.removeChannel(channel)
+      clearInterval(poll)
+      document.removeEventListener('visibilitychange', handleVisibility)
+    }
   }, [room.id, userId, isCoach, fetchParticipants, supabase])
 
   // 4. Feedbacks
@@ -772,13 +759,10 @@ export default function RoomView({ room, profile, userId, isCoach }: Props) {
       .select('id, type, mistake, correction, explanation, created_at, student_id')
       .eq('room_id', room.id)
       .order('created_at', { ascending: false })
-      .limit(20);
+      .limit(20)
 
-    if (!isCoach) {
-      query = query.eq('student_id', userId);
-    }
-
-    query.then(({ data }) => setFeedbacks(data ?? []));
+    if (!isCoach) query = query.eq('student_id', userId)
+    query.then(({ data }) => setFeedbacks(data ?? []))
 
     const channel = supabase
       .channel(`feedbacks-${room.id}`)
@@ -787,11 +771,35 @@ export default function RoomView({ room, profile, userId, isCoach }: Props) {
         schema: 'public',
         table: 'live_feedbacks',
         filter: `room_id=eq.${room.id}`,
-      }, (payload) => setFeedbacks((prev) => [payload.new as Feedback, ...prev]))
+      }, (payload) => setFeedbacks(prev => [payload.new as Feedback, ...prev]))
       .subscribe()
 
-    return () => { supabase.removeChannel(channel) }
+    // Polling feedbacks aussi
+    const poll = setInterval(() => {
+      let q = supabase
+        .from('live_feedbacks')
+        .select('id, type, mistake, correction, explanation, created_at, student_id')
+        .eq('room_id', room.id)
+        .order('created_at', { ascending: false })
+        .limit(20)
+      if (!isCoach) q = q.eq('student_id', userId)
+      q.then(({ data }) => setFeedbacks(data ?? []))
+    }, 5000)
+
+    return () => {
+      supabase.removeChannel(channel)
+      clearInterval(poll)
+    }
   }, [room.id, userId, isCoach, supabase])
+
+  // Beforeunload
+  useEffect(() => {
+    const handleUnload = () => {
+      navigator.sendBeacon('/api/livekit/leave', JSON.stringify({ roomId: room.id, userId }))
+    }
+    window.addEventListener('beforeunload', handleUnload)
+    return () => window.removeEventListener('beforeunload', handleUnload)
+  }, [room.id, userId])
 
   const handleLeave = useCallback(async () => {
     await supabase
@@ -802,32 +810,15 @@ export default function RoomView({ room, profile, userId, isCoach }: Props) {
     router.push('/dashboard')
   }, [room.id, userId, router, supabase])
 
-  // const handleRaiseHand = useCallback(async () => {
-  //   const next = !handRaised
-  //   setHandRaised(next)
-  //   await supabase
-  //     .from('room_participants')
-  //     .update({ hand_raised: next })
-  //     .eq('room_id', room.id)
-  //     .eq('user_id', userId)
-  // }, [handRaised, room.id, userId, supabase])
+  const handleRaiseHand = useCallback(async () => {
+    const next = !handRaised
+    await supabase
+      .from('room_participants')
+      .update({ hand_raised: next })
+      .eq('room_id', room.id)
+      .eq('user_id', userId)
+  }, [handRaised, room.id, userId, supabase])
 
-const handleRaiseHand = useCallback(async () => {
-  const next = !handRaised
-  console.log("→ Tentative raise hand →", next, "user:", userId)
-
-  const { error } = await supabase
-    .from('room_participants')
-    .update({ hand_raised: next })
-    .eq('room_id', room.id)
-    .eq('user_id', userId)
-
-  if (error) {
-    console.error("RAISE HAND ERROR:", error)
-  } else {
-    console.log("Hand raised mis à jour OK")
-  }
-}, [handRaised, room.id, userId, supabase])
   if (!token) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
@@ -861,6 +852,207 @@ const handleRaiseHand = useCallback(async () => {
   )
 }
 
+
+
+// export default function RoomView({ room, profile, userId, isCoach }: Props) {
+//   const router = useRouter()
+//   const supabase = useMemo(() => createClient(), [])
+
+//   const [token, setToken] = useState<string | null>(null)
+//   const [dbParticipants, setDbParticipants] = useState<DbParticipant[]>([])
+//   const [feedbacks, setFeedbacks] = useState<Feedback[]>([])
+
+//   const handRaised = useMemo(
+//     () => dbParticipants.find((p) => p.user_id === userId)?.hand_raised ?? false,
+//     [dbParticipants, userId],
+//   )
+
+//   // 1. Token LiveKit
+//   useEffect(() => {
+//     const fetchToken = async () => {
+//       const res = await fetch('/api/livekit/token', {
+//         method: 'POST',
+//         headers: { 'Content-Type': 'application/json' },
+//         body: JSON.stringify({
+//           roomName: room.livekit_room_name,
+//           participantId: userId,
+//           participantName: profile.full_name ?? userId,
+//          role: room.coaches?.user_id === userId ? 'coach' : 'listener'
+//         }),
+//       })
+//       const data = await res.json()
+//       setToken(data.token)
+//     }
+//     fetchToken()
+//   }, [room.livekit_room_name, userId, isCoach, profile.full_name, room.coaches])
+
+
+
+//   const fetchParticipants = useCallback(async () => {
+//   const { data, error } = await supabase
+//     .from('room_participants')
+//     .select(`
+//       id, 
+//       user_id, 
+//       role, 
+//       is_muted, 
+//       hand_raised, 
+//       profiles (
+//         full_name, 
+//         avatar_url
+//       )
+//     `)
+//     .eq('room_id', room.id)
+//     .is('left_at', null);
+
+//   if (error) {
+//     // Si l'erreur est encore {}, c'est que l'objet est complexe. 
+//     // On le transforme en string pour tout voir.
+//     console.error("❌ Erreur de fetch détaillée :", JSON.stringify(error, null, 2));
+//     return;
+//   }
+
+  
+
+//   setDbParticipants(data as unknown as DbParticipant[]);
+// }, [room.id, supabase]);
+
+
+//     useEffect(() => {
+//   const handleUnload = () => {
+//     // navigator.sendBeacon est fiable même pendant fermeture d'onglet
+//     navigator.sendBeacon(
+//       '/api/livekit/leave',
+//       JSON.stringify({ roomId: room.id, userId })
+//     )
+//   }
+
+//   window.addEventListener('beforeunload', handleUnload)
+//   return () => window.removeEventListener('beforeunload', handleUnload)
+// }, [room.id, userId])
+
+//   // 3. Upsert + realtime — après fetchParticipants
+//   useEffect(() => {
+
+    
+//     supabase.from('room_participants').upsert({
+//       room_id:     room.id,
+//       user_id:     userId,
+//      role: isCoach ? 'speaker' : 'listener',
+//       is_muted:    true,
+//       hand_raised: false,
+//       joined_at:   new Date().toISOString(),
+//       left_at:     null,
+//     }, { onConflict: 'room_id,user_id' }).then(() => fetchParticipants())
+
+//     const channel = supabase
+//       .channel(`participants-${room.id}`)
+//       .on('postgres_changes', {
+//         event: '*',
+//         schema: 'public',
+//         table: 'room_participants',
+//         filter: `room_id=eq.${room.id}`,
+//       }, () => fetchParticipants())
+//       .subscribe()
+
+//     return () => { supabase.removeChannel(channel) }
+//   }, [room.id, userId, isCoach, fetchParticipants, supabase])
+
+//   // 4. Feedbacks
+//   useEffect(() => {
+//     let query = supabase
+//       .from('live_feedbacks')
+//       .select('id, type, mistake, correction, explanation, created_at, student_id')
+//       .eq('room_id', room.id)
+//       .order('created_at', { ascending: false })
+//       .limit(20);
+
+//     if (!isCoach) {
+//       query = query.eq('student_id', userId);
+//     }
+
+//     query.then(({ data }) => setFeedbacks(data ?? []));
+
+//     const channel = supabase
+//       .channel(`feedbacks-${room.id}`)
+//       .on('postgres_changes', {
+//         event: 'INSERT',
+//         schema: 'public',
+//         table: 'live_feedbacks',
+//         filter: `room_id=eq.${room.id}`,
+//       }, (payload) => setFeedbacks((prev) => [payload.new as Feedback, ...prev]))
+//       .subscribe()
+
+//     return () => { supabase.removeChannel(channel) }
+//   }, [room.id, userId, isCoach, supabase])
+
+//   const handleLeave = useCallback(async () => {
+//     await supabase
+//       .from('room_participants')
+//       .update({ left_at: new Date().toISOString() })
+//       .eq('room_id', room.id)
+//       .eq('user_id', userId)
+//     router.push('/dashboard')
+//   }, [room.id, userId, router, supabase])
+
+//   // const handleRaiseHand = useCallback(async () => {
+//   //   const next = !handRaised
+//   //   setHandRaised(next)
+//   //   await supabase
+//   //     .from('room_participants')
+//   //     .update({ hand_raised: next })
+//   //     .eq('room_id', room.id)
+//   //     .eq('user_id', userId)
+//   // }, [handRaised, room.id, userId, supabase])
+
+// const handleRaiseHand = useCallback(async () => {
+//   const next = !handRaised
+//   console.log("→ Tentative raise hand →", next, "user:", userId)
+
+//   const { error } = await supabase
+//     .from('room_participants')
+//     .update({ hand_raised: next })
+//     .eq('room_id', room.id)
+//     .eq('user_id', userId)
+
+//   if (error) {
+//     console.error("RAISE HAND ERROR:", error)
+//   } else {
+//     console.log("Hand raised mis à jour OK")
+//   }
+// }, [handRaised, room.id, userId, supabase])
+//   if (!token) {
+//     return (
+//       <div className="min-h-screen bg-background flex items-center justify-center">
+//         <div className="w-8 h-8 rounded-full border-2 border-gold border-t-transparent animate-spin" />
+//       </div>
+//     )
+//   }
+
+//   return (
+//     <LiveKitRoom
+//       serverUrl={process.env.NEXT_PUBLIC_LIVEKIT_URL!}
+//       token={token}
+//       connect={true}
+//       audio={false}
+//       video={false}
+//       onDisconnected={handleLeave}
+//     >
+//       <RoomInner
+//         room={room}
+//         profile={profile}
+//         userId={userId}
+//         isCoach={isCoach}
+//         dbParticipants={dbParticipants}
+//         feedbacks={feedbacks}
+//         handRaised={handRaised}
+//         onRaiseHand={handleRaiseHand}
+//         onLeave={handleLeave}
+//         refreshParticipants={fetchParticipants}
+//       />
+//     </LiveKitRoom>
+//   )
+// }
 
 
 
