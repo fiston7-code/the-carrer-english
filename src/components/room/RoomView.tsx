@@ -333,10 +333,28 @@ function CoachMicButton() {
   const { localParticipant, isMicrophoneEnabled } = useLocalParticipant()
   const [loading, setLoading] = useState(false)
 
+  // const toggleMic = async () => {
+  //   setLoading(true)
+  //   try { await localParticipant.setMicrophoneEnabled(!isMicrophoneEnabled) }
+  //   finally { setLoading(false) }
+  // }
+
   const toggleMic = async () => {
     setLoading(true)
-    try { await localParticipant.setMicrophoneEnabled(!isMicrophoneEnabled) }
-    finally { setLoading(false) }
+    try {
+      await localParticipant.setMicrophoneEnabled(!isMicrophoneEnabled)
+    } catch (err) {
+      console.error('Coach mic error:', err)
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
+        stream.getTracks().forEach(t => t.stop())
+        await localParticipant.setMicrophoneEnabled(!isMicrophoneEnabled)
+      } catch (permErr) {
+        console.error('Mic permission denied:', permErr)
+      }
+    } finally {
+      setLoading(false)
+    }
   }
 
   return (
@@ -358,12 +376,31 @@ function ListenerMicButton({ handRaised, onRaiseHand }: { handRaised: boolean; o
   const [loading, setLoading] = useState(false)
   const canSpeak = localParticipant.permissions?.canPublish === true
 
+  // const handleClick = async () => {
+  //   if (!canSpeak) { onRaiseHand(); return }
+  //   setLoading(true)
+  //   try { await localParticipant.setMicrophoneEnabled(!isMicrophoneEnabled) }
+  //   finally { setLoading(false) }
+  // }
+
   const handleClick = async () => {
-    if (!canSpeak) { onRaiseHand(); return }
-    setLoading(true)
-    try { await localParticipant.setMicrophoneEnabled(!isMicrophoneEnabled) }
-    finally { setLoading(false) }
+  if (!canSpeak) { onRaiseHand(); return }
+  setLoading(true)
+  try {
+    await localParticipant.setMicrophoneEnabled(!isMicrophoneEnabled)
+  } catch (err) {
+    console.error('Listener mic error:', err)
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
+      stream.getTracks().forEach(t => t.stop())
+      await localParticipant.setMicrophoneEnabled(!isMicrophoneEnabled)
+    } catch (permErr) {
+      console.error('Mic permission denied:', permErr)
+    }
+  } finally {
+    setLoading(false)
   }
+}
 
   return (
     <button onClick={handleClick} disabled={loading}
@@ -832,7 +869,7 @@ export default function RoomView({ room, profile, userId, isCoach }: Props) {
       serverUrl={process.env.NEXT_PUBLIC_LIVEKIT_URL!}
       token={token}
       connect={true}
-      audio={false}
+      audio={true}
       video={false}
       onDisconnected={handleLeave}
     >
