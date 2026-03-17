@@ -1,12 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { RoomServiceClient } from 'livekit-server-sdk'
 
-const svc = new RoomServiceClient(
-  process.env.LIVEKIT_URL!,
-  process.env.LIVEKIT_API_KEY!,
-  process.env.LIVEKIT_API_SECRET!
-)
-
 export async function POST(req: NextRequest) {
   const { roomName } = await req.json()
 
@@ -14,11 +8,17 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Missing roomName' }, { status: 400 })
   }
 
+  const svc = new RoomServiceClient(
+    process.env.LIVEKIT_URL!,
+    process.env.LIVEKIT_API_KEY!,
+    process.env.LIVEKIT_API_SECRET!
+  )
+
   try {
     await svc.createRoom({
-      name:             roomName,
-      emptyTimeout:     600,  // ferme après 10min vide
-      maxParticipants:  50,
+      name:            roomName,
+      emptyTimeout:    600,
+      maxParticipants: 50,
     })
     return NextResponse.json({ ok: true })
   } catch (error: unknown) {
