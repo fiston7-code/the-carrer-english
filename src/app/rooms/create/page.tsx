@@ -77,7 +77,7 @@ export default function CreateRoomPage() {
 
       // 4. Redirige vers la room
       // La RoomView s'occupera de générer le token et LiveKit créera la salle à la volée
-      router.push(`/room/${room.id}`)
+      router.push(`/rooms/${room.id}`)
 
     } catch (err: unknown) {
       setError((err as Error).message || 'Failed to create room')
