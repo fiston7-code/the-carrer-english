@@ -66,7 +66,7 @@ export default async function DashboardPage() {
       {/* Bouton create room — coachs uniquement */}
       {isCoach && (
         <Link
-          href="/room/create"
+          href="/rooms/create"
           className="w-full py-3 rounded-xl border border-gold/40 bg-gold/10
                      text-gold font-semibold text-sm text-center
                      hover:bg-gold/20 transition-colors"
