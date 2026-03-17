@@ -8,6 +8,7 @@ import {
   useLocalParticipant,
   useTracks,
   AudioTrack,
+   useRoomContext, 
 } from '@livekit/components-react'
 import { Track } from 'livekit-client'
 import { createClient } from '@/lib/supabase/client'
@@ -339,6 +340,7 @@ function FeedbackForm({
 
 function CoachMicButton() {
   const { localParticipant, isMicrophoneEnabled } = useLocalParticipant()
+  const room = useRoomContext()   
   const [loading, setLoading] = useState(false)
 
   
@@ -346,6 +348,7 @@ function CoachMicButton() {
   const toggleMic = async () => {
     setLoading(true)
     try {
+      await room.startAudio()
       await localParticipant.setMicrophoneEnabled(!isMicrophoneEnabled)
     } catch (err) {
       console.error('Coach mic error:', err)
@@ -378,6 +381,7 @@ function CoachMicButton() {
 
 function ListenerMicButton({ handRaised, onRaiseHand }: { handRaised: boolean; onRaiseHand: () => void }) {
   const { localParticipant, isMicrophoneEnabled } = useLocalParticipant()
+  const room = useRoomContext()  
   const [loading, setLoading] = useState(false)
   const canSpeak = localParticipant.permissions?.canPublish === true
 
@@ -387,12 +391,14 @@ function ListenerMicButton({ handRaised, onRaiseHand }: { handRaised: boolean; o
   if (!canSpeak) { onRaiseHand(); return }
   setLoading(true)
   try {
+    await room.startAudio()
     await localParticipant.setMicrophoneEnabled(!isMicrophoneEnabled)
   } catch (err) {
     console.error('Listener mic error:', err)
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
-      stream.getTracks().forEach(t => t.stop())
+      // const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
+      // stream.getTracks().forEach(t => t.stop())
+      await room.startAudio()
       await localParticipant.setMicrophoneEnabled(!isMicrophoneEnabled)
     } catch (permErr) {
       console.error('Mic permission denied:', permErr)
