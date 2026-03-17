@@ -18,6 +18,7 @@ export const siteConfig = {
     subtitle:
       "Join live audio rooms with professional coaches. Get real-time corrections and track your progress session after session.",
     ctaPrimary: "Start Your Journey",
+    ctaPrimaryHref: "/auth/login",
     ctaSecondary: "See How It Works",
     socialProof: "executives coached across 12 countries",
     socialProofCount: "500+",
@@ -76,6 +77,8 @@ export const siteConfig = {
     headlineAccent: "leader",
     subtitle: "Your first session is free. No credit card required.",
     cta: "Book My Free Session",
+    ctaFinal: "/auth/login",
+
   },
   footer: {
     copyright: "© 2025 All rights reserved",

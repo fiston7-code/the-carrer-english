@@ -1,6 +1,7 @@
 import { siteConfig } from "@/config/site"
 import GoldButton from "./ui/GoldButton"
 
+
 const { finalCta } = siteConfig
 
 export default function FinalCTA() {
@@ -11,7 +12,7 @@ export default function FinalCTA() {
         <span className="text-primary">{finalCta.headlineAccent}</span>?
       </h2>
       <p className="text-muted-foreground max-w-sm">{finalCta.subtitle}</p>
-      <GoldButton>{finalCta.cta}</GoldButton>
+        <GoldButton>{finalCta.cta}</GoldButton>
     </section>
   )
 }
