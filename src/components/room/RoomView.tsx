@@ -1,3 +1,5 @@
+
+
 'use client'
 
 import { useEffect, useState, useCallback, useMemo } from 'react'
@@ -6,11 +8,10 @@ import {
   LiveKitRoom,
   useParticipants,
   useLocalParticipant,
-  useTracks,
-  AudioTrack,
-   useRoomContext, 
+   useRoomContext,
+   RoomAudioRenderer, 
+   useAudioPlayback
 } from '@livekit/components-react'
-import { Track } from 'livekit-client'
 import { createClient } from '@/lib/supabase/client'
 import Image from 'next/image'
 import { LogOut, Mic, MicOff, Hand, MessageSquare, X, Clock, ChevronDown } from 'lucide-react'
@@ -91,16 +92,16 @@ async function requestMicPermission(): Promise<MediaStream | null> {
 
 // ─── Remote Audio ─────────────────────────────────────────────────────────────
 
-function RemoteAudio() {
-  const tracks = useTracks([Track.Source.Microphone], { onlySubscribed: true })
-  return (
-    <>
-      {tracks.map((track) => (
-        <AudioTrack key={track.participant.identity} trackRef={track} />
-      ))}
-    </>
-  )
-}
+// function RemoteAudio() {
+//   const tracks = useTracks([Track.Source.Microphone], { onlySubscribed: true })
+//   return (
+//     <>
+//       {tracks.map((track) => (
+//         <AudioTrack key={track.participant.identity} trackRef={track} />
+//       ))}
+//     </>
+//   )
+// }
 
 // ─── Avatar ───────────────────────────────────────────────────────────────────
 
@@ -338,27 +339,62 @@ function FeedbackForm({
 
 // ─── Coach Mic Button ─────────────────────────────────────────────────────────
 
-function CoachMicButton() {
-  const { localParticipant, isMicrophoneEnabled } = useLocalParticipant()
-  const room = useRoomContext()   
-  const [loading, setLoading] = useState(false)
+// function CoachMicButton() {
+//   const { localParticipant, isMicrophoneEnabled } = useLocalParticipant()
+//   const room = useRoomContext()   
+//   const [loading, setLoading] = useState(false)
 
   
+
+//   const toggleMic = async () => {
+//     setLoading(true)
+//     try {
+//       await room.startAudio()
+//       await localParticipant.setMicrophoneEnabled(!isMicrophoneEnabled)
+//     } catch (err) {
+//       console.error('Coach mic error:', err)
+//       try {
+//         const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
+//         stream.getTracks().forEach(t => t.stop())
+//         await localParticipant.setMicrophoneEnabled(!isMicrophoneEnabled)
+//       } catch (permErr) {
+//         console.error('Mic permission denied:', permErr)
+//       }
+//     } finally {
+//       setLoading(false)
+//     }
+//   }
+
+//   return (
+//     <button onClick={toggleMic} disabled={loading}
+//       className={`w-12 h-12 rounded-full border flex items-center justify-center transition-colors disabled:opacity-50 ${
+//         isMicrophoneEnabled ? 'bg-gold border-gold' : 'bg-surface border-border hover:border-gold'
+//       }`}>
+//       {isMicrophoneEnabled
+//         ? <Mic size={20} className="text-black" />
+//         : <MicOff size={20} className="text-muted-foreground" />}
+//     </button>
+//   )
+// }
+
+function CoachMicButton() {
+  const { localParticipant, isMicrophoneEnabled } = useLocalParticipant()
+  const room = useRoomContext()
+  const { startAudio, canPlayAudio } = useAudioPlayback(room)
+  const [loading, setLoading] = useState(false)
 
   const toggleMic = async () => {
     setLoading(true)
     try {
-      await room.startAudio()
+      // 1. Débloque le contexte audio si nécessaire (Safari Fix)
+      if (!canPlayAudio) await startAudio()
+         await room.startAudio()
+      
+      // 2. Active/Désactive via LiveKit
       await localParticipant.setMicrophoneEnabled(!isMicrophoneEnabled)
     } catch (err) {
       console.error('Coach mic error:', err)
-      try {
-        const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
-        stream.getTracks().forEach(t => t.stop())
-        await localParticipant.setMicrophoneEnabled(!isMicrophoneEnabled)
-      } catch (permErr) {
-        console.error('Mic permission denied:', permErr)
-      }
+      alert("Microphone access failed. Please check browser permissions.")
     } finally {
       setLoading(false)
     }
@@ -366,12 +402,10 @@ function CoachMicButton() {
 
   return (
     <button onClick={toggleMic} disabled={loading}
-      className={`w-12 h-12 rounded-full border flex items-center justify-center transition-colors disabled:opacity-50 ${
-        isMicrophoneEnabled ? 'bg-gold border-gold' : 'bg-surface border-border hover:border-gold'
+      className={`w-12 h-12 rounded-full border flex items-center justify-center transition-all ${
+        isMicrophoneEnabled ? 'bg-gold border-gold shadow-lg shadow-gold/20' : 'bg-surface border-border'
       }`}>
-      {isMicrophoneEnabled
-        ? <Mic size={20} className="text-black" />
-        : <MicOff size={20} className="text-muted-foreground" />}
+      {isMicrophoneEnabled ? <Mic size={20} className="text-black" /> : <MicOff size={20} className="text-muted-foreground" />}
     </button>
   )
 }
@@ -379,43 +413,80 @@ function CoachMicButton() {
 
 // ─── Listener Mic Button ──────────────────────────────────────────────────────
 
-function ListenerMicButton({ handRaised, onRaiseHand }: { handRaised: boolean; onRaiseHand: () => void }) {
-  const { localParticipant, isMicrophoneEnabled } = useLocalParticipant()
-  const room = useRoomContext()  
-  const [loading, setLoading] = useState(false)
-  const canSpeak = localParticipant.permissions?.canPublish === true
+// function ListenerMicButton({ handRaised, onRaiseHand }: { handRaised: boolean; onRaiseHand: () => void }) {
+//   const { localParticipant, isMicrophoneEnabled } = useLocalParticipant()
+//   const room = useRoomContext()  
+//   const [loading, setLoading] = useState(false)
+//   const canSpeak = localParticipant.permissions?.canPublish === true
 
   
 
+//   const handleClick = async () => {
+//   if (!canSpeak) { onRaiseHand(); return }
+//   setLoading(true)
+//   try {
+//     await room.startAudio()
+//     await localParticipant.setMicrophoneEnabled(!isMicrophoneEnabled)
+//   } catch (err) {
+//     console.error('Listener mic error:', err)
+//     try {
+//       const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
+//       stream.getTracks().forEach(t => t.stop())
+//       await room.startAudio()
+//       await localParticipant.setMicrophoneEnabled(!isMicrophoneEnabled)
+//     } catch (permErr) {
+//       console.error('Mic permission denied:', permErr)
+//     }
+//   } finally {
+//     setLoading(false)
+//   }
+// }
+
+//   return (
+//     <button onClick={handleClick} disabled={loading}
+//       className={`w-12 h-12 rounded-full border flex items-center justify-center transition-colors disabled:opacity-50 ${
+//         isMicrophoneEnabled ? 'bg-gold border-gold' : 'bg-surface border-border hover:border-gold'
+//       }`}>
+//       {isMicrophoneEnabled
+//         ? <Mic size={20} className="text-black" />
+//         : <MicOff size={20} className="text-muted-foreground" />}
+//     </button>
+//   )
+// }
+
+function ListenerMicButton({ handRaised, onRaiseHand }: { handRaised: boolean; onRaiseHand: () => void }) {
+  const { localParticipant, isMicrophoneEnabled } = useLocalParticipant()
+  const room = useRoomContext()
+  const { startAudio, canPlayAudio } = useAudioPlayback(room)
+  const [loading, setLoading] = useState(false)
+  
+  // Vérifie si le coach a donné le droit de publier
+  const canSpeak = localParticipant.permissions?.canPublish === true
+
   const handleClick = async () => {
-  if (!canSpeak) { onRaiseHand(); return }
-  setLoading(true)
-  try {
-    await room.startAudio()
-    await localParticipant.setMicrophoneEnabled(!isMicrophoneEnabled)
-  } catch (err) {
-    console.error('Listener mic error:', err)
-    try {
-      // const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
-      // stream.getTracks().forEach(t => t.stop())
-      await room.startAudio()
-      await localParticipant.setMicrophoneEnabled(!isMicrophoneEnabled)
-    } catch (permErr) {
-      console.error('Mic permission denied:', permErr)
+    if (!canSpeak) { 
+      onRaiseHand() 
+      return 
     }
-  } finally {
-    setLoading(false)
+    
+    setLoading(true)
+    try {
+      if (!canPlayAudio) await startAudio()
+         await room.startAudio()
+      await localParticipant.setMicrophoneEnabled(!isMicrophoneEnabled)
+    } catch (err) {
+      console.error('Listener mic error:', err)
+    } finally {
+      setLoading(false)
+    }
   }
-}
 
   return (
     <button onClick={handleClick} disabled={loading}
-      className={`w-12 h-12 rounded-full border flex items-center justify-center transition-colors disabled:opacity-50 ${
-        isMicrophoneEnabled ? 'bg-gold border-gold' : 'bg-surface border-border hover:border-gold'
+      className={`w-12 h-12 rounded-full border flex items-center justify-center transition-all ${
+        isMicrophoneEnabled ? 'bg-gold border-gold shadow-lg shadow-gold/20' : 'bg-surface border-border'
       }`}>
-      {isMicrophoneEnabled
-        ? <Mic size={20} className="text-black" />
-        : <MicOff size={20} className="text-muted-foreground" />}
+      {isMicrophoneEnabled ? <Mic size={20} className="text-black" /> : <MicOff size={20} className="text-muted-foreground" />}
     </button>
   )
 }
@@ -518,7 +589,7 @@ const listeners = dbParticipants.filter(
 
   return (
     <div className="min-h-screen bg-background text-foreground flex flex-col pb-28">
-      <RemoteAudio />
+      <RoomAudioRenderer />
 
       {/* FeedbackForm — coach tape sur un speaker */}
       {feedbackTarget && (
@@ -866,7 +937,7 @@ export default function RoomView({ room, profile, userId, isCoach }: Props) {
       serverUrl={process.env.NEXT_PUBLIC_LIVEKIT_URL!}
       token={token}
       connect={true}
-      audio={false}
+      audio={true}
       video={false}
       onDisconnected={handleLeave}
     >
