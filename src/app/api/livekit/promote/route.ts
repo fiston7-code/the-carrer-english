@@ -21,13 +21,6 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: 'Missing params' }, { status: 400 })
   }
 
-  // await svc.updateParticipant(roomName, participantIdentity, undefined, {
-  //   canPublish,
-  //   canSubscribe: true,
-  //   canPublishData: true,
-  // })
-
-  // return NextResponse.json({ ok: true })
 
   try {
   console.log(`[PROMOTE] Updating ${participantIdentity} in ${roomName} → canPublish: ${canPublish}`);
