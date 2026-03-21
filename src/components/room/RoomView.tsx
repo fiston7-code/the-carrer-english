@@ -65,7 +65,7 @@ function FeedbackCard({ feedback }: { feedback: Feedback }) {
       </div>
       {isCorrection && feedback.mistake && <p className="text-destructive text-sm line-through">✗ {feedback.mistake}</p>}
       {isCorrection && feedback.correction && <p className="text-foreground text-sm font-medium">✓ {feedback.correction}</p>}
-      {!isCorrection && feedback.explanation && <p className="text-foreground text-sm italic">"{feedback.explanation}"</p>}
+      {!isCorrection && feedback.explanation && <p className="text-foreground text-sm italic">{feedback.explanation}</p>}
     </div>
   )
 }
@@ -80,19 +80,38 @@ function FeedbackForm({ roomId, coachId, targetUserId, targetName, onClose }: { 
 
   const canSubmit = (type === 'correction' && correction.trim().length > 0) || (type === 'tip' && explanation.trim().length > 0)
 
+
   const handleSubmit = async () => {
-    if (!canSubmit) return
-    setLoading(true)
-    try {
-      const { error } = await supabase.from('live_feedbacks').insert({
-        room_id: roomId, student_id: targetUserId, coach_id: coachId, type,
-        mistake: type === 'correction' ? mistake.trim() || null : null,
-        correction: type === 'correction' ? correction.trim() : null,
-        explanation: type === 'tip' ? explanation.trim() : null,
-      })
-      if (!error) onClose()
-    } finally { setLoading(false) }
+  if (!canSubmit) return
+  setLoading(true)
+  
+  // On prépare l'objet proprement
+  const feedbackData = {
+    room_id: roomId,
+    student_id: targetUserId,
+    coach_id: coachId,
+    type: type, // Sera 'correction' ou 'tip'
+    // On n'envoie les fautes que si c'est une correction
+    mistake: type === 'correction' ? (mistake.trim() || null) : null,
+    correction: type === 'correction' ? (correction.trim() || null) : null,
+    // On garde l'explication DANS TOUS LES CAS (très important !)
+    explanation: explanation.trim() || null,
   }
+
+  try {
+    const { error } = await supabase.from('live_feedbacks').insert(feedbackData)
+    
+    if (error) {
+      console.error("Erreur d'insertion :", error.message)
+      alert("Erreur : " + error.message) // Pour voir l'erreur en direct sur ton écran
+    } else {
+      onClose()
+      // Optionnel : un petit refresh manuel si le realtime est lent
+    }
+  } finally {
+    setLoading(false)
+  }
+}
 
   const QUICK_TIPS = ['Please let others finish 🤫', 'Lower your voice 🔉', 'Wait your turn 👍', 'Speak up please 🔊', 'Great job! 🔥', 'Keep going! 👏']
   const QUICK_CORRECTIONS = ['Use "the"', 'Past tense here', 'Wrong preposition', 'Pronunciation']

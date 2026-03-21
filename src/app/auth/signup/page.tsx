@@ -66,7 +66,7 @@ export default function SignupPage() {
               We&apos;ve sent a confirmation link to your email. Click it to activate your **Executive** account.
             </p>
           </div>
-          <Link href="/login" className="text-gold text-sm hover:underline">
+          <Link href="/auth/login" className="text-gold text-sm hover:underline">
             Back to login
           </Link>
         </div>
