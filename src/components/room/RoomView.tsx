@@ -320,105 +320,7 @@ function RoomInner({ room, profile, userId, isCoach, dbParticipants, feedbacks, 
   )
 }
 
-// export default function RoomView({ room, profile, userId, isCoach }: Props) {
-//   const router = useRouter()
-//   const supabase = useMemo(() => createClient(), [])
-  
-//   const [token, setToken] = useState<string | null>(null)
-//   const [dbParticipants, setDbParticipants] = useState<DbParticipant[]>([])
-//   const [feedbacks, setFeedbacks] = useState<Feedback[]>([])
-  
-//   // ✅ On garde l'ancien rôle en mémoire pour ne re-fetcher le token QUE si nécessaire
-//   const lastFetchedRole = useRef<string | null>(null)
 
-//   const myParticipant = useMemo(() => dbParticipants.find((p) => p.user_id === userId), [dbParticipants, userId])
-//   const myRole = myParticipant?.role ?? (isCoach ? 'coach' : 'listener')
-//   const handRaised = myParticipant?.hand_raised ?? false
-
-//   // 1. Fetching Participants (Realtime priority)
-//   const fetchParticipants = useCallback(async () => {
-//     const threshold = new Date(Date.now() - 60000).toISOString() // 60s
-//     const { data: parts } = await supabase.from('room_participants').select('*').eq('room_id', room.id).is('left_at', null)
-//     if (!parts) return
-//     const { data: profs } = await supabase.from('profiles').select('id, full_name, avatar_url').in('id', parts.map(p => p.user_id))
-//     const merged = parts.map(p => ({ ...p, profiles: profs?.find(pr => pr.id === p.user_id) ?? null }))
-//     setDbParticipants(merged as unknown as DbParticipant[])
-//   }, [room.id, supabase])
-
-
-//   // 2. Heartbeat (Le "Pro" Pulse)
-//   useEffect(() => {
-//     if (!userId || !room.id) return
-//     const pulse = async () => {
-//       if (document.visibilityState !== 'visible') return
-//       await supabase.from('room_participants').update({ last_seen_at: new Date().toISOString(), role: myRole }).eq('room_id', room.id).eq('user_id', userId).is('left_at', null)
-//     }
-//     const interval = setInterval(pulse, 30000)
-//     pulse()
-//     return () => clearInterval(interval)
-//   }, [userId, room.id, myRole, supabase])
-
-//   // 2. Token Logic (Correction: Re-fetch on role change)
-//   useEffect(() => {
-//     if (lastFetchedRole.current === myRole) return
-    
-//     fetch('/api/livekit/token', {
-//       method: 'POST',
-//       headers: { 'Content-Type': 'application/json' },
-//       body: JSON.stringify({ roomName: room.livekit_room_name, participantId: userId, participantName: profile.full_name ?? userId, role: myRole }),
-//     })
-//     .then(r => r.json())
-//     .then(d => {
-//       setToken(d.token)
-//       lastFetchedRole.current = myRole
-//     })
-//   }, [myRole, room.livekit_room_name, userId, profile.full_name])
-
-//   // 3. Sync & Realtime
-//   useEffect(() => {
-//     supabase.from('room_participants').upsert({
-//       room_id: room.id, user_id: userId,
-//       role: isCoach ? 'coach' : (myRole === 'speaker' ? 'speaker' : 'listener'),
-//       joined_at: new Date().toISOString(), left_at: null
-//     }, { onConflict: 'room_id,user_id' }).then(() => fetchParticipants())
-
-//     const channel = supabase.channel(`room-${room.id}`)
-//       .on('postgres_changes', { event: '*', schema: 'public', table: 'room_participants', filter: `room_id=eq.${room.id}` }, () => fetchParticipants())
-//       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'live_feedbacks', filter: `room_id=eq.${room.id}` }, (payload) => setFeedbacks(prev => [payload.new as Feedback, ...prev]))
-//       .subscribe()
-
-//     const poll = setInterval(fetchParticipants, 5000)
-//     return () => { supabase.removeChannel(channel); clearInterval(poll) }
-//   }, [room.id, userId, isCoach, fetchParticipants, supabase])
-
-//   const handleLeave = useCallback(async () => {
-//     await supabase.from('room_participants').update({ left_at: new Date().toISOString() }).eq('room_id', room.id).eq('user_id', userId)
-//     router.push('/dashboard')
-//   }, [room.id, userId, router, supabase])
-
-//   const handleRaiseHand = useCallback(async () => {
-//     await supabase.from('room_participants').update({ hand_raised: !handRaised }).eq('room_id', room.id).eq('user_id', userId)
-//   }, [handRaised, room.id, userId, supabase])
-
-//   if (!token) return (
-//     <div className="min-h-screen bg-background flex flex-col items-center justify-center gap-4">
-//       <div className="w-10 h-10 border-4 border-gold border-t-transparent rounded-full animate-spin" />
-//       <p className="text-[10px] font-black tracking-widest uppercase text-gold">Entering Classroom...</p>
-//     </div>
-//   )
-
-//   return (
-//     <LiveKitRoom serverUrl={process.env.NEXT_PUBLIC_LIVEKIT_URL!} token={token} connect audio video={false} onDisconnected={handleLeave}>
-//       <RoomInner 
-//         room={room} profile={profile} userId={userId} isCoach={isCoach} 
-//         dbParticipants={dbParticipants} feedbacks={feedbacks} 
-//         handRaised={handRaised} onRaiseHand={handleRaiseHand} 
-//         onLeave={handleLeave} refreshParticipants={fetchParticipants}
-//         myRole={myRole}
-//       />
-//     </LiveKitRoom>
-//   )
-// }
 
 export default function RoomView({ room, profile, userId, isCoach }: Props) {
   const router = useRouter()
@@ -538,15 +440,67 @@ export default function RoomView({ room, profile, userId, isCoach }: Props) {
     return () => { supabase.removeChannel(channel) }
   }, [room.id, userId, isCoach, fetchParticipants, supabase])
 
-  const handleLeave = useCallback(async () => {
-    await supabase
-      .from('room_participants')
-      .update({ left_at: new Date().toISOString() })
-      .eq('room_id', room.id)
-      .eq('user_id', userId)
+  // const handleLeave = useCallback(async () => {
+  //   await supabase
+  //     .from('room_participants')
+  //     .update({ left_at: new Date().toISOString() })
+  //     .eq('room_id', room.id)
+  //     .eq('user_id', userId)
     
-    router.push('/dashboard')
-  }, [room.id, userId, router, supabase])
+  //   router.push('/dashboard')
+  // }, [room.id, userId, router, supabase])
+
+  const handleLeave = useCallback(async () => {
+  // 1. Récupérer joined_at pour calculer la durée
+  const { data: participation } = await supabase
+    .from('room_participants')
+    .select('joined_at')
+    .eq('room_id', room.id)
+    .eq('user_id', userId)
+    .is('left_at', null)
+    .single()
+
+  const now = new Date()
+  const joinedAt = participation?.joined_at ? new Date(participation.joined_at) : now
+  const durationMinutes = Math.max(1, Math.floor((now.getTime() - joinedAt.getTime()) / 60000))
+
+  // 2. Compter les feedbacks reçus dans cette session
+  const { data: sessionFeedbacks } = await supabase
+    .from('live_feedbacks')
+    .select('type')
+    .eq('room_id', room.id)
+    .eq('student_id', userId)
+
+  const correctionsCount = sessionFeedbacks?.filter(f => f.type === 'correction').length ?? 0
+  const tipsCount = sessionFeedbacks?.filter(f => f.type === 'tip').length ?? 0
+
+  // 3. Marquer la sortie
+  await supabase
+    .from('room_participants')
+    .update({ left_at: now.toISOString() })
+    .eq('room_id', room.id)
+    .eq('user_id', userId)
+
+  // 4. Créer le session report (seulement si participation > 0 min)
+  if (!isCoach && durationMinutes > 0) {
+    await supabase.from('session_reports').insert({
+      room_id: room.id,
+      user_id: userId,
+      coach_id: room.coaches?.id ?? null,
+      duration_minutes: durationMinutes,
+      corrections_count: correctionsCount,
+      tips_count: tipsCount,
+    })
+
+    // 5. Incrémenter total_minutes_practiced sur le profil
+    await supabase.rpc('increment_minutes', { 
+      user_id_input: userId, 
+      minutes_to_add: durationMinutes 
+    })
+  }
+
+  router.push('/dashboard')
+}, [room.id, room.coaches?.id, userId, isCoach, router, supabase])
 
   const handleRaiseHand = useCallback(async () => {
     await supabase
