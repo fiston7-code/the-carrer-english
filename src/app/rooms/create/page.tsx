@@ -21,6 +21,7 @@ export default function CreateRoomPage() {
   const [startsAt, setStartsAt]         = useState('')
   const [loading, setLoading]           = useState(false)
   const [error, setError]               = useState('')
+  const [isFree, setIsFree] = useState(false)
 
   const canSubmit = title.trim() && category && industry
 
@@ -67,6 +68,7 @@ export default function CreateRoomPage() {
           livekit_room_name,
           is_live:            true,
           status:             'live',
+          is_free:             isFree,
           max_participants:   maxParticipants,
           starts_at:          startsNow ? new Date().toISOString() : new Date(startsAt).toISOString(),
         })
@@ -196,6 +198,29 @@ export default function CreateRoomPage() {
             <span>2</span><span>50</span>
           </div>
         </div>
+
+        {/* ✅ Free Room Toggle — entre Max Participants et Start Time */}
+<div className="bg-surface border border-border rounded-xl px-4 py-3 flex items-center justify-between">
+  <div>
+    <p className="text-sm font-semibold text-foreground">Free Room</p>
+    <p className="text-xs text-muted-foreground mt-0.5">
+      {isFree ? 'Everyone can join — no subscription needed' : 'Pro subscribers only'}
+    </p>
+  </div>
+  <button
+    onClick={() => setIsFree(!isFree)}
+    className={`relative w-12 h-6 rounded-full transition-colors ${
+      isFree ? 'bg-gold' : 'bg-surface-elevated border border-border'
+    }`}
+  >
+    <div className={`absolute top-0.5 w-5 h-5 bg-white rounded-full shadow transition-all ${
+      isFree ? 'left-6' : 'left-0.5'
+    }`} />
+  </button>
+</div>
+
+{/* Schedule Toggle */}
+
 
         {/* Schedule Toggle */}
         <div className="flex flex-col gap-2">

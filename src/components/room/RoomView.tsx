@@ -393,7 +393,7 @@ export default function RoomView({ room, profile, userId, isCoach }: Props) {
       body: JSON.stringify({ 
         roomName: room.livekit_room_name, 
         participantId: userId, 
-        participantName: profile.full_name ?? userId, 
+        participantName: profile?.full_name ?? userId, 
         role: myRole 
       }),
     })
@@ -402,7 +402,7 @@ export default function RoomView({ room, profile, userId, isCoach }: Props) {
       setToken(d.token)
       lastFetchedRole.current = myRole
     })
-  }, [myRole, room.livekit_room_name, userId, profile.full_name, token])
+  }, [myRole, room.livekit_room_name, userId, profile?.full_name, token])
 
   // 4. Inscription initiale et Realtime
   useEffect(() => {
