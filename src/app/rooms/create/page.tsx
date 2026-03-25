@@ -4,6 +4,8 @@ import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { ArrowLeft, Loader2 } from 'lucide-react'
+import { generateInviteCode } from '@/lib/invite-code'
+import { isPageStatic } from 'next/dist/build/utils'
 
 const CATEGORIES = ['Interview Prep', 'Negotiation', 'Presentation', 'Networking', 'Writing', 'General']
 const INDUSTRIES = ['Banking & Finance', 'Mining & Energy', 'NGO & Development', 'Telecom & Tech', 'Healthcare', 'Government & Public Sector']
@@ -21,7 +23,7 @@ export default function CreateRoomPage() {
   const [startsAt, setStartsAt]         = useState('')
   const [loading, setLoading]           = useState(false)
   const [error, setError]               = useState('')
-  const [isFree, setIsFree] = useState(false)
+  const [isPublic, setIsPublic] = useState(true) // Par défaut public
 
   const canSubmit = title.trim() && category && industry
 
@@ -54,6 +56,8 @@ export default function CreateRoomPage() {
       // 2. Génère un nom unique pour LiveKit
       // On garde un nom propre pour que LiveKit l'initialise au premier join
       const livekit_room_name = `room-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`
+      const isPrivate = !isPublic
+      const inviteCode = isPrivate ? generateInviteCode() : null
 
       // 3. Insère la room dans Supabase 
       // Note: On saute l'appel fetch('/api/livekit/create-room') pour éviter les erreurs 500
@@ -68,7 +72,9 @@ export default function CreateRoomPage() {
           livekit_room_name,
           is_live:            true,
           status:             'live',
-          is_free:             isFree,
+          is_public: isPublic,
+          is_private: isPrivate,
+          invite_code: inviteCode,
           max_participants:   maxParticipants,
           starts_at:          startsNow ? new Date().toISOString() : new Date(startsAt).toISOString(),
         })
@@ -76,6 +82,14 @@ export default function CreateRoomPage() {
         .single()
 
       if (roomError) throw roomError
+
+      if (!isPublic) {
+  await fetch('/api/rooms/invite-code', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ roomId: room.id }),
+  })
+}
 
       // 4. Redirige vers la room
       // La RoomView s'occupera de générer le token et LiveKit créera la salle à la volée
@@ -200,21 +214,24 @@ export default function CreateRoomPage() {
         </div>
 
         {/* ✅ Free Room Toggle — entre Max Participants et Start Time */}
+{/* ✅ Toggle de Visibilité */}
 <div className="bg-surface border border-border rounded-xl px-4 py-3 flex items-center justify-between">
   <div>
-    <p className="text-sm font-semibold text-foreground">Free Room</p>
+    <p className="text-sm font-semibold text-foreground">Public Room</p>
     <p className="text-xs text-muted-foreground mt-0.5">
-      {isFree ? 'Everyone can join — no subscription needed' : 'Pro subscribers only'}
+      {isPublic 
+        ? 'Everyone can see this on the dashboard' 
+        : 'Private: Access only via invite link'}
     </p>
   </div>
   <button
-    onClick={() => setIsFree(!isFree)}
+    onClick={() => setIsPublic(!isPublic)}
     className={`relative w-12 h-6 rounded-full transition-colors ${
-      isFree ? 'bg-gold' : 'bg-surface-elevated border border-border'
+      isPublic ? 'bg-gold' : 'bg-surface-elevated border border-border'
     }`}
   >
     <div className={`absolute top-0.5 w-5 h-5 bg-white rounded-full shadow transition-all ${
-      isFree ? 'left-6' : 'left-0.5'
+      isPublic ? 'left-6' : 'left-0.5'
     }`} />
   </button>
 </div>
@@ -279,245 +296,60 @@ export default function CreateRoomPage() {
   )
 }
 
+// import { createSupabaseServerClient } from '@/lib/supabase/server'
+// import { redirect } from 'next/navigation'
+// import JoinRoomClient from './JoinRoomClient'
 
-// 'use client'
+// type Props = { params: Promise<{ code: string }> }
 
-// import { useState } from 'react'
-// import { useRouter } from 'next/navigation'
-// import { createClient } from '@/lib/supabase/client'
-// import { ArrowLeft, Loader2 } from 'lucide-react'
+// export default async function JoinPage({ params }: Props) {
+//   const { code } = await params
+//   const supabase = await createSupabaseServerClient()
 
-// const CATEGORIES = ['Interview Prep', 'Negotiation', 'Presentation', 'Networking', 'Writing', 'General']
-// const INDUSTRIES = ['Banking & Finance', 'Mining & Energy', 'NGO & Development', 'Telecom & Tech', 'Healthcare', 'Government & Public Sector']
+//   const { data: { user } } = await supabase.auth.getUser()
 
-// export default function CreateRoomPage() {
-//   const router = useRouter()
-//   const supabase = createClient()
+//   // Trouve la room avec ce code
+//   const { data: room } = await supabase
+//     .from('rooms')
+//     .select(`
+//       id, title, description, category, status,
+//       is_private, invite_code,
+//       coaches (
+//         id, full_name, avatar_url, is_verified, specialty
+//       )
+//     `)
+//     .eq('invite_code', code.toUpperCase())
+//     .single()
 
-//   const [title, setTitle]               = useState('')
-//   const [description, setDescription]   = useState('')
-//   const [category, setCategory]         = useState('')
-//   const [industry, setIndustry]         = useState('')
-//   const [maxParticipants, setMax]       = useState(20)
-//   const [startsNow, setStartsNow]       = useState(true)
-//   const [startsAt, setStartsAt]         = useState('')
-//   const [loading, setLoading]           = useState(false)
-//   const [error, setError]               = useState('')
-
-//   const canSubmit = title.trim() && category && industry
-
-//   const handleCreate = async () => {
-//     if (!canSubmit) return
-//     setLoading(true)
-//     setError('')
-
-//     try {
-//       // 1. Récupère le profil + coach du user connecté
-//       const { data: { user } } = await supabase.auth.getUser()
-//       if (!user) throw new Error('Not authenticated')
-
-//       const { data: profile } = await supabase
-//         .from('profiles')
-//         .select('id')
-//         .eq('id', user.id)
-//         .single()
-
-//       if (!profile) throw new Error('Profile not found')
-
-//       const { data: coach } = await supabase
-//         .from('coaches')
-//         .select('id')
-//         .eq('user_id', profile.id)
-//         .single()
-
-//       if (!coach) throw new Error('You must be a coach to create a room')
-
-//       // 2. Génère un nom unique pour LiveKit
-//       const livekit_room_name = `room-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`
-
-//       // 3. Crée la room dans LiveKit via l'API
-//       const lkRes = await fetch('/api/livekit/create-room', {
-//         method: 'POST',
-//         headers: { 'Content-Type': 'application/json' },
-//         body: JSON.stringify({ roomName: livekit_room_name }),
-//       })
-//       if (!lkRes.ok) throw new Error('Failed to create LiveKit room')
-
-//       // 4. Insère la room dans Supabase
-//       const { data: room, error: roomError } = await supabase
-//         .from('rooms')
-//         .insert({
-//           title:              title.trim(),
-//           description:        description.trim() || null,
-//           category,
-//           industry,
-//           coach_id:           coach.id,
-//           livekit_room_name,
-//           is_live:            true,
-//           status:             'live',
-//           max_participants:   maxParticipants,
-//           starts_at:          startsNow ? new Date().toISOString() : new Date(startsAt).toISOString(),
-//         })
-//         .select('id')
-//         .single()
-
-//       if (roomError) throw roomError
-
-//       // 5. Redirige vers la room
-//       router.push(`/room/${room.id}`)
-
-//     } catch (err: unknown) {
-//       setError((err as Error).message || 'Failed to create room')
-//     } finally {
-//       setLoading(false)
-//     }
+//   // Code invalide
+//   if (!room) {
+//     return (
+//       <main className="min-h-screen bg-background flex items-center justify-center px-4">
+//         <div className="text-center flex flex-col gap-4">
+//           <p className="text-4xl">🔍</p>
+//           <h1 className="text-xl font-bold text-foreground">Invalid invite code</h1>
+//           <p className="text-muted-foreground text-sm">
+//             This link may have expired or is incorrect.
+//           </p>
+//         </div>
+//       </main>
+//     )
 //   }
 
-//   return (
-//     <div className="min-h-screen bg-background max-w-lg mx-auto px-4 pb-12">
+//   // Pas connecté → redirect vers auth avec callback
+//   if (!user) {
+//     redirect(`/auth?redirect=/join/${code}`)
+//   }
 
-//       {/* Header */}
-//       <div className="flex items-center gap-3 py-5">
-//         <button onClick={() => router.back()}
-//           className="w-9 h-9 rounded-xl bg-surface border border-border flex items-center justify-center text-muted-foreground hover:text-foreground transition-colors">
-//           <ArrowLeft size={16} />
-//         </button>
-//         <h1 className="text-base font-bold text-foreground">Create a Room</h1>
-//       </div>
+//   // Déjà membre → redirect directement vers la room
+//   const { data: existing } = await supabase
+//     .from('room_participants')
+//     .select('id')
+//     .eq('room_id', room.id)
+//     .eq('user_id', user.id)
+//     .single()
 
-//       {/* Error */}
-//       {error && (
-//         <div className="mb-4 p-3 rounded-xl bg-destructive/10 border border-destructive/20 text-destructive text-sm">
-//           {error}
-//         </div>
-//       )}
+//   if (existing) redirect(`/rooms/${room.id}`)
 
-//       <div className="flex flex-col gap-5">
-
-//         {/* Title */}
-//         <div className="flex flex-col gap-2">
-//           <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-//             Room Title *
-//           </label>
-//           <input
-//             className="w-full h-12 bg-surface border border-border rounded-xl px-4 text-sm text-foreground placeholder:text-muted-foreground focus:border-gold outline-none transition-colors"
-//             placeholder="e.g. C-Suite Pitch Practice"
-//             value={title}
-//             onChange={e => setTitle(e.target.value)}
-//             maxLength={80}
-//           />
-//         </div>
-
-//         {/* Description */}
-//         <div className="flex flex-col gap-2">
-//           <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-//             Description
-//           </label>
-//           <textarea
-//             className="w-full bg-surface border border-border rounded-xl px-4 py-3 text-sm text-foreground placeholder:text-muted-foreground focus:border-gold outline-none transition-colors resize-none h-20"
-//             placeholder="What will participants practice in this room?"
-//             value={description}
-//             onChange={e => setDescription(e.target.value)}
-//             maxLength={300}
-//           />
-//         </div>
-
-//         {/* Category */}
-//         <div className="flex flex-col gap-2">
-//           <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-//             Category *
-//           </label>
-//           <div className="grid grid-cols-2 gap-2">
-//             {CATEGORIES.map(c => (
-//               <button key={c} onClick={() => setCategory(c)}
-//                 className={`py-2.5 px-3 rounded-xl border text-sm font-medium transition-all ${
-//                   category === c
-//                     ? 'border-gold bg-gold/10 text-gold'
-//                     : 'border-border bg-surface text-foreground hover:border-gold/40'
-//                 }`}>
-//                 {c}
-//               </button>
-//             ))}
-//           </div>
-//         </div>
-
-//         {/* Industry */}
-//         <div className="flex flex-col gap-2">
-//           <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-//             Industry *
-//           </label>
-//           <div className="grid grid-cols-2 gap-2">
-//             {INDUSTRIES.map(i => (
-//               <button key={i} onClick={() => setIndustry(i)}
-//                 className={`py-2.5 px-3 rounded-xl border text-xs font-medium transition-all text-left ${
-//                   industry === i
-//                     ? 'border-gold bg-gold/10 text-gold'
-//                     : 'border-border bg-surface text-foreground hover:border-gold/40'
-//                 }`}>
-//                 {i}
-//               </button>
-//             ))}
-//           </div>
-//         </div>
-
-//         {/* Max Participants */}
-//         <div className="flex flex-col gap-2">
-//           <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-//             Max Participants — <span className="text-gold">{maxParticipants}</span>
-//           </label>
-//           <input
-//             type="range" min={2} max={50} step={1}
-//             value={maxParticipants}
-//             onChange={e => setMax(Number(e.target.value))}
-//             className="w-full accent-gold"
-//           />
-//           <div className="flex justify-between text-xs text-muted-foreground">
-//             <span>2</span><span>50</span>
-//           </div>
-//         </div>
-
-//         {/* Starts */}
-//         <div className="flex flex-col gap-2">
-//           <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-//             Start Time
-//           </label>
-//           <div className="flex gap-2">
-//             <button onClick={() => setStartsNow(true)}
-//               className={`flex-1 py-2.5 rounded-xl border text-sm font-medium transition-all ${
-//                 startsNow ? 'border-gold bg-gold/10 text-gold' : 'border-border bg-surface text-foreground'
-//               }`}>
-//               🔴 Start Now
-//             </button>
-//             <button onClick={() => setStartsNow(false)}
-//               className={`flex-1 py-2.5 rounded-xl border text-sm font-medium transition-all ${
-//                 !startsNow ? 'border-gold bg-gold/10 text-gold' : 'border-border bg-surface text-foreground'
-//               }`}>
-//               📅 Schedule
-//             </button>
-//           </div>
-//           {!startsNow && (
-//             <input
-//               type="datetime-local"
-//               value={startsAt}
-//               onChange={e => setStartsAt(e.target.value)}
-//               className="w-full h-12 bg-surface border border-border rounded-xl px-4 text-sm text-foreground focus:border-gold outline-none transition-colors"
-//             />
-//           )}
-//         </div>
-
-//         {/* CTA */}
-//         <button
-//           onClick={handleCreate}
-//           disabled={!canSubmit || loading}
-//           className="w-full h-12 bg-gold text-black font-bold rounded-xl disabled:opacity-40 transition-opacity flex items-center justify-center gap-2 mt-2"
-//         >
-//           {loading
-//             ? <><Loader2 size={18} className="animate-spin" /> Creating…</>
-//             : '🎙️ Create Room'
-//           }
-//         </button>
-
-//       </div>
-//     </div>
-//   )
+//   return <JoinRoomClient room={room} userId={user.id} inviteCode={code.toUpperCase()} />
 // }

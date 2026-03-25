@@ -23,14 +23,6 @@ export default async function DashboardPage() {
 
   if (!profile?.onboarding_completed) redirect("/onboarding")
 
-  // Verifie si l'user est coach
-  // const { data: coach } = await supabase
-  //   .from("coaches")
-  //   .select("id")
-  //   .eq("user_id", profile.id)
-  //   .single()
-
-    //  On vérifie si l'utilisateur est un coach
   const { data: coach } = await supabase
     .from("coaches")
     .select("id, is_pro, coach_students(count)")

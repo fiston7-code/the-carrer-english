@@ -13,10 +13,11 @@ import {
 import { createClient } from '@/lib/supabase/client'
 import Image from 'next/image'
 import { LogOut, Mic, MicOff, Hand, MessageSquare, X, Clock } from 'lucide-react'
+import InviteShareButton from './InviteShareButton'
 
 // --- Types ---
 type Profile = { id: string; full_name: string | null; avatar_url: string | null; english_level: string | null }
-type Room = { id: string; title: string; status: string; livekit_room_name: string; coaches: { id: string; full_name: string; avatar_url: string | null; is_verified: boolean; user_id: string } | null }
+type Room = { id: string; title: string; status: string; livekit_room_name: string; invite_code: string | null; coaches: { id: string; full_name: string; avatar_url: string | null; is_verified: boolean; user_id: string; } | null }
 type DbParticipant = { id: string; user_id: string; role: string; is_muted: boolean; hand_raised: boolean; profiles: { full_name: string | null; avatar_url: string | null } | null }
 type Feedback = { id: string; type: string; mistake: string | null; correction: string | null; explanation: string | null; created_at: string; student_id: string }
 type Props = { room: Room; profile: Profile; userId: string; isCoach: boolean }
@@ -238,6 +239,15 @@ function RoomInner({ room, profile, userId, isCoach, dbParticipants, feedbacks, 
           <LogOut size={18} />
         </button>
       </div>
+
+      {isCoach && room.invite_code && (
+  <div className="px-6 mt-4">
+    <InviteShareButton
+      inviteCode={room.invite_code}
+      roomTitle={room.title}
+    />
+  </div>
+)}
 
       {/* Raised Hands Overlay (Coach only) */}
       {isCoach && raisedHands.length > 0 && (
