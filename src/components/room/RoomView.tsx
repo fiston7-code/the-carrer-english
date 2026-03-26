@@ -232,7 +232,8 @@ function RoomInner({ room, profile, userId, isCoach, dbParticipants, feedbacks, 
           <h1 className="font-black text-xl tracking-tight uppercase">{room.title}</h1>
           <div className="flex items-center gap-2 mt-1">
             <span className="w-2 h-2 bg-green-500 rounded-full animate-pulse" />
-            <p className="text-gold text-[10px] font-bold tracking-widest uppercase">Live with Coach {room.coaches?.full_name}</p>
+            {/* <p className="text-gold text-[10px] font-bold tracking-widest uppercase">Live with Coach {room.coaches?.full_name}</p> */}
+            Coach {room.coaches?.full_name} · {dbParticipants.length} participants
           </div>
         </div>
         <button onClick={onLeave} className="p-3 bg-surface border border-border rounded-full text-destructive active:scale-90 transition-all">
@@ -277,7 +278,7 @@ function RoomInner({ room, profile, userId, isCoach, dbParticipants, feedbacks, 
             </div>
           ))}
           {/* Others */}
-          {dbParticipants.filter(p => p.user_id !== room.coaches?.user_id).map(p => (
+          {/* {dbParticipants.filter(p => p.user_id !== room.coaches?.user_id).map(p => (
             <div key={p.id} className="relative group">
                <Avatar 
                 participant={p} 
@@ -288,7 +289,35 @@ function RoomInner({ room, profile, userId, isCoach, dbParticipants, feedbacks, 
               {p.hand_raised && <div className="absolute top-0 right-2 bg-gold p-1 rounded-full border-2 border-background shadow-lg"><Hand size={12} className="text-black" /></div>}
               {p.role === 'speaker' && <div className="absolute -bottom-1 right-2 bg-blue-500 p-1 rounded-full border-2 border-background shadow-lg"><Mic size={10} className="text-white" /></div>}
             </div>
-          ))}
+          ))} */}
+
+          {dbParticipants.filter(p => p.user_id !== room.coaches?.user_id).map(p => (
+  <div key={p.id} className="flex flex-col items-center">
+    {/* Conteneur relatif pour l'avatar uniquement */}
+    <div className="relative">
+      <Avatar 
+        participant={p} 
+        size="md" 
+        speaking={speakingIds.has(p.user_id)} 
+        onPress={isCoach ? () => setFeedbackTarget({ userId: p.user_id, name: p.profiles?.full_name ?? 'Unknown' }) : undefined}
+      />
+      
+      {/* Badge Main Levée - Positionné par rapport à l'Avatar */}
+      {p.hand_raised && (
+        <div className="absolute -top-1 -right-1 bg-gold p-1.5 rounded-full border-2 border-background shadow-lg z-10 animate-bounce">
+          <Hand size={12} className="text-black" />
+        </div>
+      )}
+
+      {/* Badge Speaker - Positionné par rapport à l'Avatar */}
+      {p.role === 'speaker' && (
+        <div className="absolute -bottom-1 -right-1 bg-blue-500 p-1 rounded-full border-2 border-background shadow-lg z-10">
+          <Mic size={10} className="text-white" />
+        </div>
+      )}
+    </div>
+  </div>
+))}
         </div>
       </div>
 
