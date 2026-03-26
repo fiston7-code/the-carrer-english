@@ -15,6 +15,7 @@ export type OnboardingData = {
   career_goals: string[]
   professional_role: string
   company_name: string
+  phone_number: string 
 }
 
 export default function OnboardingPage() {
@@ -22,36 +23,17 @@ export default function OnboardingPage() {
   const supabase = createClient()
   const [step, setStep] = useState(0)
   const [loading, setLoading] = useState(false)
-  const [data, setData] = useState<OnboardingData>({
-    english_level: '',
-    professional_role: '',
-    company_name: '',
-    industry: '',
-    career_goals: [],
-  })
+ const [data, setData] = useState<OnboardingData>({
+  english_level: '',
+  professional_role: '',
+  company_name: '',
+  phone_number: '', // ← Initialisé vide
+  industry: '',
+  career_goals: [],
+})
 
   const nextStep = () => setStep((s) => s + 1)
 
-
-
-//   const { error } = await supabase
-//     .from('profiles')
-//     .upsert({
-//       id: user.id,                    // ← obligatoire pour upsert
-//       email: user.email,              // ← récupéré depuis auth
-//       full_name: user.user_metadata?.full_name,
-//       english_level: data.english_level,
-//       industry: data.industry,
-//       career_goals: data.career_goals,
-//       onboarding_completed: true,
-//     })
-
-//   if (error) {
-//   console.error('SUPABASE ERROR:', JSON.stringify(error, null, 2))
-//   alert(error.message) // ← brutal mais efficace pour debug
-//   setLoading(false)
-//   return
-// }
 
 const handleFinish = async () => {
   setLoading(true)
@@ -72,6 +54,7 @@ const handleFinish = async () => {
       career_goals: data.career_goals,
       professional_role: data.professional_role,
       company_name: data.company_name,
+      phone_number: data.phone_number,
       onboarding_completed: true,
       updated_at: new Date().toISOString(),
     })
@@ -104,15 +87,17 @@ const handleFinish = async () => {
     value={data.industry}
     onChange={(v) => setData({ ...data, industry: v })}
     onNext={nextStep}
-  />,
-  <StepRole                                         // ← index 3
-    key="role"
-    roleValue={data.professional_role}
-    companyValue={data.company_name}
-    onRoleChange={(v) => setData({ ...data, professional_role: v })}
-    onCompanyChange={(v) => setData({ ...data, company_name: v })}
-    onNext={nextStep}
-  />,
+  />,                                       // ← index 3
+  <StepRole
+  key="role"
+  roleValue={data.professional_role}
+  companyValue={data.company_name}
+  phoneValue={data.phone_number} // ← On passe la valeur
+  onRoleChange={(v) => setData({ ...data, professional_role: v })}
+  onCompanyChange={(v) => setData({ ...data, company_name: v })}
+  onPhoneChange={(v) => setData({ ...data, phone_number: v })} // ← On passe le setter
+  onNext={nextStep}
+/>,
   <StepGoals                                        // ← index 4
     key="goals"
     value={data.career_goals}

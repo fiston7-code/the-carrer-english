@@ -208,7 +208,7 @@ export default function Header() {
                 ) : (
                   <>
                     <Link
-                      href="/auth/dashboard"
+                      href="/dashboard"
                       onClick={() => setMenuOpen(false)}
                       className="text-muted-foreground hover:text-foreground transition-colors duration-200 text-sm pt-4"
                     >
