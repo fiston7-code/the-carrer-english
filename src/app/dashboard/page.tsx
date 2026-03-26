@@ -90,7 +90,7 @@ export default async function DashboardPage() {
         <PlusCircle size={16} /> New Room
       </Link>
       <Link
-        href="/coach/students"
+        href="/coach/dashboard"
         className="flex-1 py-3 px-2 rounded-xl border border-border bg-secondary/50 text-foreground font-bold text-xs flex items-center justify-center gap-2 hover:bg-secondary transition-all"
       >
         <Users size={16} /> Students

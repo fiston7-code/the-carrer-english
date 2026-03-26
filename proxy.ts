@@ -75,7 +75,7 @@ export async function proxy(request: NextRequest) {  // ← middleware, pas prox
 }
 
 export const config = {
-  matcher: ['/dashboard/:path*', '/onboarding'],
+  matcher: ['/dashboard/:path*', '/onboarding','/coach/:path*',],
 }
 
 // import { createServerClient } from '@supabase/ssr'
